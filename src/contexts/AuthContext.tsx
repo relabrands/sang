@@ -39,13 +39,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (user) {
                 try {
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) {
-                        setUserProfile(userDoc.data() as UserProfile);
+                    // 1. Check if user is in 'admins' collection
+                    const adminDoc = await getDoc(doc(db, "admins", user.uid));
+
+                    if (adminDoc.exists()) {
+                        const adminData = adminDoc.data();
+                        // Force role to admin
+                        setUserProfile({
+                            uid: user.uid,
+                            fullName: adminData.fullName || user.email?.split('@')[0] || "Admin",
+                            email: user.email!,
+                            role: "admin",
+                            reputationScore: 100,
+                            createdAt: adminData.createdAt
+                        });
                     } else {
-                        // Handle case where auth exists but firestore doc doesn't (rare but possible)
-                        console.error("User document not found in Firestore");
-                        setUserProfile(null);
+                        // 2. Not in admins, check 'users' collection
+                        const userDoc = await getDoc(doc(db, "users", user.uid));
+                        if (userDoc.exists()) {
+                            setUserProfile(userDoc.data() as UserProfile);
+                        } else {
+                            // Rare: Authenticated but no profile found
+                            console.error("User document not found in Firestore");
+                            setUserProfile(null);
+                        }
                     }
                 } catch (error) {
                     console.error("Error fetching user profile:", error);

@@ -23,12 +23,23 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, form.email, form.password);
+      const { user } = await signInWithEmailAndPassword(auth, form.email, form.password);
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      const adminDoc = await getDoc(doc(db, "admins", user.uid));
+
+      let targetMeta = "/dashboard";
+      if (adminDoc.exists()) {
+        targetMeta = "/admin";
+      } else if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.role === 'admin') targetMeta = "/admin";
+      }
+
       toast({
-        title: "¡Bienvenido!",
-        description: "Has iniciado sesión correctamente.",
+        title: "¡Bienvenido de vuelta!",
+        description: "Has iniciado sesión exitosamente.",
       });
-      navigate("/dashboard");
+      navigate(targetMeta);
     } catch (error: any) {
       console.error("Error logging in:", error);
       let errorMessage = "Error al iniciar sesión.";

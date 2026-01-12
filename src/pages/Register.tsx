@@ -48,6 +48,7 @@ export default function Register() {
         title: "¡Cuenta creada!",
         description: "Tu cuenta ha sido creada exitosamente.",
       });
+      // New users are always 'user' role by default in this flow, so straight to dashboard
       navigate("/dashboard");
     } catch (error: any) {
       console.error("Error creating account:", error);
