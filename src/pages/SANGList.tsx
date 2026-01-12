@@ -13,7 +13,7 @@ import { collection, query, where, getDocs, collectionGroup, getDoc } from "fire
 const statusFilters: { value: SANGStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "active", label: "Activos" },
-  { value: "pending", label: "Pendientes" },
+  { value: "pending", label: "Pendientes (Recluting)" },
   { value: "completed", label: "Completados" },
 ];
 
@@ -46,21 +46,19 @@ export default function SANGList() {
           }
         });
 
-        // 2. Member SANGs
+        // 2. Member SANGs (Active AND Pending Requests)
+        // We fetch ALL memberships for the user.
         const membershipsQ = query(collectionGroup(db, 'members'), where('userId', '==', currentUser.uid));
         const membershipSnap = await getDocs(membershipsQ);
 
         const membershipPromises = membershipSnap.docs.map(async (memDoc) => {
-          const data = memDoc.data();
+          // memDoc.data() contains { userId, status, ... }
+          // memDoc.ref.parent.parent is the SANG document reference
           const sangDocRef = memDoc.ref.parent.parent;
 
-          // Only include if active or legacy (not pending requests, typically)
-          // But user might want to see pending SANGs they are waiting on? 
-          // Let's filter out 'pending' status requests if we want only "My SANGs"
-          // Actually, if I joined and am pending, should I see it? Maybe. 
-          // For now, let's include 'active' SANGs mainly.
-          if (sangDocRef && (data.status === 'active' || !data.status)) {
+          if (sangDocRef) {
             if (!processedSangIds.has(sangDocRef.id)) {
+              // Ensure the SANG still exists
               const sangSnap = await getDoc(sangDocRef);
               if (sangSnap.exists()) {
                 processedSangIds.add(sangSnap.id);
