@@ -9,6 +9,9 @@ import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
 import type { Frequency, TurnAssignment } from "@/types";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp, setDoc, doc } from "firebase/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 
 const frequencyOptions = [
   { value: "weekly", label: "Semanal", description: "Pagos cada 7 días" },
@@ -21,9 +24,20 @@ const turnOptions = [
   { value: "manual", label: "Manual", icon: ListOrdered, description: "Tú decides el orden" },
 ];
 
+// Helper to generate a random 6-character alphanumeric code
+const generateInviteCode = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
 export default function CreateSANG() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -37,17 +51,54 @@ export default function CreateSANG() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser) return;
+
     setIsLoading(true);
 
-    // Simulate creation - will be replaced with actual logic
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const inviteCode = generateInviteCode();
+      const sangData = {
+        name: form.name,
+        contributionAmount: parseInt(form.contributionAmount),
+        frequency: form.frequency,
+        numberOfParticipants: parseInt(form.numberOfParticipants),
+        startDate: new Date(form.startDate),
+        turnAssignment: form.turnAssignment,
+        organizerId: currentUser.uid,
+        status: "pending",
+        inviteCode: inviteCode,
+        currentTurn: 1,
+        createdAt: serverTimestamp(),
+      };
+
+      // Create SANG document
+      const docRef = await addDoc(collection(db, "sangs"), sangData);
+
+      // Add organizer as a member in 'members' subcollection
+      await setDoc(doc(db, `sangs/${docRef.id}/members`, currentUser.uid), {
+        userId: currentUser.uid,
+        sangId: docRef.id,
+        turnNumber: 1,
+        status: "approved",
+        joinedAt: serverTimestamp(),
+        role: "organizer"
+      });
+
       toast({
         title: "¡SANG creado!",
-        description: "Tu SANG ha sido creado exitosamente. Comparte el código con tus miembros.",
+        description: `Tu SANG ha sido creado exitosamente. Código: ${inviteCode}`,
       });
       navigate("/dashboard");
-    }, 1500);
+    } catch (error) {
+      console.error("Error creating SANG:", error);
+      toast({
+        title: "Error",
+        description: "Hubo un error al crear el SANG. Inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const nextStep = () => setStep(step + 1);
@@ -93,9 +144,8 @@ export default function CreateSANG() {
           {[1, 2, 3, 4, 5].map((s) => (
             <div
               key={s}
-              className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                s <= step ? "bg-primary" : "bg-border"
-              }`}
+              className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${s <= step ? "bg-primary" : "bg-border"
+                }`}
             />
           ))}
         </div>
@@ -163,11 +213,10 @@ export default function CreateSANG() {
                   {frequencyOptions.map((option) => (
                     <label
                       key={option.value}
-                      className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        form.frequency === option.value
+                      className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${form.frequency === option.value
                           ? "border-primary bg-accent"
                           : "border-border hover:border-primary/50"
-                      }`}
+                        }`}
                     >
                       <RadioGroupItem value={option.value} />
                       <div>
@@ -246,11 +295,10 @@ export default function CreateSANG() {
                       key={option.value}
                       type="button"
                       onClick={() => setForm({ ...form, turnAssignment: option.value as TurnAssignment })}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                        form.turnAssignment === option.value
+                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${form.turnAssignment === option.value
                           ? "border-primary bg-accent"
                           : "border-border hover:border-primary/50"
-                      }`}
+                        }`}
                     >
                       <option.icon className="h-6 w-6 text-primary" />
                       <p className="font-medium">{option.label}</p>

@@ -7,50 +7,94 @@ import { Label } from "@/components/ui/label";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock SANG data for preview
-const mockSANGPreview = {
-  name: "SANG Familia García",
-  organizerName: "María García",
-  contributionAmount: 5000,
-  frequency: "Mensual",
-  numberOfParticipants: 10,
-  currentMembers: 7,
-  startDate: new Date("2024-02-01"),
-};
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs, setDoc, doc, getDoc, serverTimestamp } from "firebase/firestore";
+import { useAuth } from "@/contexts/AuthContext";
+import type { SANG } from "@/types";
 
 export default function JoinSANG() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentUser } = useAuth();
   const [inviteCode, setInviteCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"enter" | "preview" | "success">("enter");
-  const [sangPreview, setSangPreview] = useState<typeof mockSANGPreview | null>(null);
+  const [sangPreview, setSangPreview] = useState<SANG & { organizerName: string } | null>(null);
 
   const handleSearch = async () => {
     if (inviteCode.length < 6) return;
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      setSangPreview(mockSANGPreview);
+    try {
+      const q = query(collection(db, "sangs"), where("inviteCode", "==", inviteCode));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        toast({
+          title: "SANG no encontrado",
+          description: "Verifica el código e inténtalo de nuevo.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const sangDoc = querySnapshot.docs[0];
+      const sangData = sangDoc.data() as SANG;
+      sangData.id = sangDoc.id; // Ensure ID is part of data
+
+      // Fetch organizer name
+      let organizerName = "Desconocido";
+      if (sangData.organizerId) {
+        const userDoc = await getDoc(doc(db, "users", sangData.organizerId));
+        if (userDoc.exists()) {
+          organizerName = userDoc.data().fullName || "Usuario";
+        }
+      }
+
+      setSangPreview({ ...sangData, organizerName });
       setStep("preview");
-    }, 1000);
+    } catch (error) {
+      console.error("Error searching SANG:", error);
+      toast({
+        title: "Error",
+        description: "Hubo un problema al buscar el SANG.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleJoin = async () => {
+    if (!currentUser || !sangPreview) return;
     setIsLoading(true);
 
-    // Simulate join request
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // Create request in members subcollection
+      await setDoc(doc(db, `sangs/${sangPreview.id}/members`, currentUser.uid), {
+        userId: currentUser.uid,
+        sangId: sangPreview.id,
+        turnNumber: 0, // 0 indicates not assigned yet
+        status: "pending",
+        joinedAt: serverTimestamp(),
+      });
+
       setStep("success");
       toast({
         title: "Solicitud enviada",
         description: "El organizador revisará tu solicitud pronto.",
       });
-    }, 1000);
+    } catch (error) {
+      console.error("Error joining SANG:", error);
+      toast({
+        title: "Error",
+        description: "No pudimos enviar tu solicitud. Inténtalo más tarde.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -151,7 +195,7 @@ export default function JoinSANG() {
                     <Calendar className="h-5 w-5" />
                     <span>Frecuencia</span>
                   </div>
-                  <span className="font-semibold">{sangPreview.frequency}</span>
+                  <span className="font-semibold capitalize">{sangPreview.frequencyLabel || sangPreview.frequency}</span>
                 </div>
 
                 <div className="flex items-center justify-between py-3 border-b border-border">
@@ -160,7 +204,7 @@ export default function JoinSANG() {
                     <span>Miembros</span>
                   </div>
                   <span className="font-semibold">
-                    {sangPreview.currentMembers} / {sangPreview.numberOfParticipants}
+                    {sangPreview.numberOfParticipants} Participantes
                   </span>
                 </div>
 
@@ -170,7 +214,9 @@ export default function JoinSANG() {
                     <span>Inicio</span>
                   </div>
                   <span className="font-semibold">
-                    {sangPreview.startDate.toLocaleDateString("es-DO")}
+                    {sangPreview.startDate instanceof Object && 'seconds' in sangPreview.startDate
+                      ? new Date(sangPreview.startDate.seconds * 1000).toLocaleDateString("es-DO")
+                      : new Date(sangPreview.startDate).toLocaleDateString("es-DO")}
                   </span>
                 </div>
               </div>
