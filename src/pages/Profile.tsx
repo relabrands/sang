@@ -7,7 +7,6 @@ import {
   Phone,
   Calendar,
   TrendingUp,
-  TrendingDown,
   ChevronRight,
   LogOut,
   Shield,
@@ -18,7 +17,7 @@ import {
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { ReputationBadge } from "@/components/ReputationBadge";
@@ -26,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, getDocs, orderBy, doc, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
@@ -38,7 +37,7 @@ const menuItems = [
 export default function Profile() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { userProfile, loading } = useAuth();
+  const { userProfile, loading, currentUser } = useAuth();
 
   // Activity History State
   const [activityHistory, setActivityHistory] = useState<any[]>([]);
@@ -74,18 +73,29 @@ export default function Profile() {
         fullName: userProfile.fullName || "",
         phoneNumber: (userProfile as any).phoneNumber || ""
       });
+    } else if (currentUser) {
+      // Fallback if no profile doc yet
+      setEditForm({
+        fullName: currentUser.displayName || "",
+        phoneNumber: currentUser.phoneNumber || ""
+      });
     }
-  }, [userProfile]);
+  }, [userProfile, currentUser]);
 
   // Fetch real activity history
   useEffect(() => {
     const fetchHistory = async () => {
-      if (!userProfile?.uid) return;
+      // Use currentUser.uid if userProfile is missing (e.g. first login before doc creation)
+      const uid = userProfile?.uid || currentUser?.uid;
+      if (!uid) return;
+
       setLoadingHistory(true);
       try {
+        // Note: This query requires a composite index: organizerId ASC, createdAt DESC
+        // If index is missing, it will fail. Ensure firestore.indexes.json is deployed.
         const q = query(
           collection(db, "sangs"),
-          where("organizerId", "==", userProfile.uid),
+          where("organizerId", "==", uid),
           orderBy("createdAt", "desc")
         );
         const snapshot = await getDocs(q);
@@ -98,27 +108,33 @@ export default function Profile() {
       }
     };
     fetchHistory();
-  }, [userProfile]);
+  }, [userProfile, currentUser]);
 
   const handleSaveProfile = async () => {
-    if (!userProfile?.uid) return;
+    const uid = userProfile?.uid || currentUser?.uid;
+    if (!uid) return;
+
     setIsSaving(true);
     try {
-      const userRef = doc(db, "users", userProfile.uid);
-      await updateDoc(userRef, {
+      const userRef = doc(db, "users", uid);
+      const userData = {
+        uid: uid,
+        email: currentUser?.email,
         fullName: editForm.fullName,
-        phoneNumber: editForm.phoneNumber
-      });
+        phoneNumber: editForm.phoneNumber,
+        updatedAt: serverTimestamp(),
+        // Only set createdAt if it doesn't exist (handled by merge, but if new doc, we want it)
+        // Ideally createdAt is set on registration, but for legacy/broken users:
+      };
+
+      // Use setDoc with merge: true to create if missing or update if exists
+      await setDoc(userRef, userData, { merge: true });
 
       toast({
         title: "Perfil actualizado",
         description: "Tu información se ha guardado correctamente.",
       });
       setIsEditing(false);
-      // Note: AuthContext might need a refresh logic or rely on real-time listener if implemented, 
-      // but simple page reload or optimistic UI can work. 
-      // For now, let's reload the page to be safe or assuming onAuthStateChanged picks it up if we force refresh? 
-      // Actually Firestore listener in AuthContext handles updates if configured.
       window.location.reload();
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -141,7 +157,8 @@ export default function Profile() {
     );
   }
 
-  if (!userProfile) {
+  // Allow rendering if we have currentUser even if userProfile (firestore doc) is missing
+  if (!userProfile && !currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -152,11 +169,20 @@ export default function Profile() {
     );
   }
 
-  // Use editForm for display in edit mode, otherwise userProfile
-  const displayUser = isEditing ? editForm : {
-    fullName: userProfile.fullName,
-    phoneNumber: (userProfile as any).phoneNumber || "No registrado"
-  };
+  // Display data
+  const displayName = isEditing ? editForm.fullName : (userProfile?.fullName || currentUser?.displayName || "Usuario");
+  const displayEmail = userProfile?.email || currentUser?.email;
+  const displayPhone = isEditing ? editForm.phoneNumber : ((userProfile as any)?.phoneNumber || "No registrado");
+
+  // Date handling
+  let displayDate = "Reciente";
+  if (userProfile?.createdAt) {
+    if ((userProfile.createdAt as any).toDate) {
+      displayDate = (userProfile.createdAt as any).toDate().toLocaleDateString("es-DO", { year: "numeric", month: "long" });
+    } else if (userProfile.createdAt instanceof Date) {
+      displayDate = userProfile.createdAt.toLocaleDateString("es-DO", { year: "numeric", month: "long" });
+    }
+  }
 
   return (
     <div className="min-h-screen bg-muted/30 pb-20 md:pb-8">
@@ -184,7 +210,7 @@ export default function Profile() {
 
           <Avatar className="h-24 w-24 mx-auto mb-4 ring-4 ring-accent">
             <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-              {getInitials(userProfile.fullName)}
+              {getInitials(displayName)}
             </AvatarFallback>
           </Avatar>
 
@@ -198,12 +224,12 @@ export default function Profile() {
               />
             </div>
           ) : (
-            <h1 className="text-2xl font-bold">{userProfile.fullName}</h1>
+            <h1 className="text-2xl font-bold">{displayName}</h1>
           )}
 
-          <p className="text-muted-foreground">{userProfile.email}</p>
+          <p className="text-muted-foreground">{displayEmail}</p>
           <div className="mt-3">
-            <ReputationBadge score={userProfile.reputationScore} size="lg" />
+            <ReputationBadge score={userProfile?.reputationScore || 100} size="lg" />
           </div>
         </div>
 
@@ -241,7 +267,7 @@ export default function Profile() {
                     className="h-8 mt-1"
                   />
                 ) : (
-                  <p className="font-medium">{displayUser.fullName}</p>
+                  <p className="font-medium">{displayName}</p>
                 )}
               </div>
             </div>
@@ -253,7 +279,7 @@ export default function Profile() {
               </div>
               <div className="opacity-70">
                 <p className="text-xs text-muted-foreground">Correo electrónico</p>
-                <p className="font-medium">{userProfile.email}</p>
+                <p className="font-medium">{displayEmail}</p>
               </div>
             </div>
 
@@ -272,7 +298,7 @@ export default function Profile() {
                     className="h-8 mt-1"
                   />
                 ) : (
-                  <p className="font-medium">{displayUser.phoneNumber || "No registrado"}</p>
+                  <p className="font-medium">{displayPhone}</p>
                 )}
               </div>
             </div>
@@ -283,11 +309,7 @@ export default function Profile() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Miembro desde</p>
-                <p className="font-medium">
-                  {userProfile.createdAt && userProfile.createdAt.toDate
-                    ? userProfile.createdAt.toDate().toLocaleDateString("es-DO", { year: "numeric", month: "long" })
-                    : "Fecha desconocida"}
-                </p>
+                <p className="font-medium">{displayDate}</p>
               </div>
             </div>
           </div>

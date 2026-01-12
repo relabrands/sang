@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Users,
-  TrendingUp,
   AlertTriangle,
   DollarSign,
   Activity,
@@ -19,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, getDocs, where, getCountFromServer } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, getCountFromServer } from "firebase/firestore";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -61,7 +60,6 @@ export default function AdminDashboard() {
         }));
 
         // 2. Fetch All Data (for lists)
-        // Note: For scalability, pagination should be added later.
         const allUsersQuery = query(usersColl, orderBy("createdAt", "desc"));
         const allUsersSnap = await getDocs(allUsersQuery);
         const users = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -301,7 +299,11 @@ export default function AdminDashboard() {
                         <span className="text-xs text-muted-foreground block">{sang.frequency}</span>
                       </td>
                       <td className="py-4 text-right">
-                        <Button variant="outline" size="sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/sang/${sang.id}`)}
+                        >
                           Ver detalles
                         </Button>
                       </td>

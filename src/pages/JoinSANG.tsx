@@ -16,7 +16,7 @@ export default function JoinSANG() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
 
   const [inviteCode, setInviteCode] = useState(searchParams.get("code") || "");
   const [isLoading, setIsLoading] = useState(false);
@@ -82,14 +82,16 @@ export default function JoinSANG() {
     setIsLoading(true);
 
     try {
-      // Check if already a member? (Optional safety)
-      // Create request in members subcollection
+      const memberName = userProfile?.fullName || currentUser.displayName || "Usuario";
+
+      // Create request in members subcollection with name!
       await setDoc(doc(db, `sangs/${sangPreview.id}/members`, currentUser.uid), {
         userId: currentUser.uid,
         sangId: sangPreview.id,
         turnNumber: 0, // 0 indicates not assigned yet
         status: "pending",
         joinedAt: serverTimestamp(),
+        name: memberName
       });
 
       setStep("success");
