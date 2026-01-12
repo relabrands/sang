@@ -38,41 +38,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentUser(user);
 
             if (user) {
-                try {
-                    // 1. Check if user is in 'admins' collection
-                    const adminDoc = await getDoc(doc(db, "admins", user.uid));
+                // OPTIMIZATION: Check Custom Claims (Auth Token) first
+                // This allows instant access without waiting for Firestore
+                const tokenResult = await user.getIdTokenResult();
+                const role = tokenResult.claims.role as "user" | "admin" | undefined;
 
-                    if (adminDoc.exists()) {
-                        const adminData = adminDoc.data();
-                        // Force role to admin
-                        setUserProfile({
-                            uid: user.uid,
-                            fullName: adminData.fullName || user.email?.split('@')[0] || "Admin",
-                            email: user.email!,
-                            role: "admin",
-                            reputationScore: 100,
-                            createdAt: adminData.createdAt
-                        });
-                    } else {
-                        // 2. Not in admins, check 'users' collection
-                        const userDoc = await getDoc(doc(db, "users", user.uid));
-                        if (userDoc.exists()) {
-                            setUserProfile(userDoc.data() as UserProfile);
-                        } else {
-                            // Rare: Authenticated but no profile found
-                            console.error("User document not found in Firestore");
-                            setUserProfile(null);
-                        }
+                // 1. Set minimal profile immediately to unblock UI
+                setUserProfile({
+                    uid: user.uid,
+                    email: user.email!,
+                    fullName: user.displayName || user.email?.split('@')[0] || "Usuario",
+                    role: role || "user", // Default to user if claim isn't ready
+                    reputationScore: 100, // Placeholder
+                    createdAt: new Date()
+                });
+
+                // Allow UI to render immediately
+                setLoading(false);
+
+                // 2. Fetch detailed profile in background for updates (reputation, etc.)
+                try {
+                    const docSnap = await getDoc(doc(db, "users", user.uid));
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        setUserProfile(prev => ({
+                            ...prev!, // Keep existing (like role from token if authoritative)
+                            ...data as UserProfile,
+                            // Ensure role matches token if token is fresher or logic dictates
+                            role: role || (data.role as "admin" | "user")
+                        }));
                     }
-                } catch (error) {
-                    console.error("Error fetching user profile:", error);
-                    setUserProfile(null);
+                } catch (err) {
+                    console.error("Background profile fetch error", err);
                 }
             } else {
                 setUserProfile(null);
+                setLoading(false);
             }
-
-            setLoading(false);
         });
 
         return unsubscribe;
@@ -90,7 +92,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             {loading ? (
                 <div className="flex flex-col items-center justify-center min-h-screen bg-background">
                     <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                    <p className="mt-4 text-sm text-muted-foreground animate-pulse">Cargando SANG Connect...</p>
                 </div>
             ) : (
                 children
