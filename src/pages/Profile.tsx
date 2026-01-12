@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -21,13 +21,8 @@ import { Header } from "@/components/Header";
 import { ReputationBadge } from "@/components/ReputationBadge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { auth } from "@/lib/firebase";
-
-// Mock Reputation History (can be replaced later with real subcollection fetch)
-const mockReputationHistory = [
-  { id: "1", change: 10, reason: "SANG completado", date: new Date("2024-01-10"), sangName: "SANG Familia García" },
-  { id: "2", change: -5, reason: "Pago tardío", date: new Date("2023-12-20"), sangName: "SANG Oficina" },
-];
+import { auth, db } from "@/lib/firebase";
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
 
 const menuItems = [
   { icon: Bell, label: "Notificaciones", path: "/notifications" },
@@ -38,6 +33,8 @@ const menuItems = [
 export default function Profile() {
   const navigate = useNavigate();
   const { userProfile, loading } = useAuth();
+  const [activityHistory, setActivityHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const getInitials = (name: string) => {
     return name
@@ -55,6 +52,31 @@ export default function Profile() {
       console.error("Error signing out", error);
     }
   };
+
+  // Fetch real activity history (SANGs organized)
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!userProfile?.uid) return;
+      setLoadingHistory(true);
+      try {
+        // Get SANGs organized by user as history
+        const q = query(
+          collection(db, "sangs"),
+          where("organizerId", "==", userProfile.uid),
+          orderBy("createdAt", "desc")
+        );
+        const snapshot = await getDocs(q);
+        const sangs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setActivityHistory(sangs);
+      } catch (error) {
+        console.error("Error fetching profile history:", error);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+    fetchHistory();
+  }, [userProfile]);
+
 
   if (loading) {
     return (
@@ -107,12 +129,12 @@ export default function Profile() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6 animate-slide-up">
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-primary">0</p>
-            <p className="text-xs text-muted-foreground">SANGs Completados</p>
+            <p className="text-2xl font-bold text-primary">{activityHistory.length}</p>
+            <p className="text-xs text-muted-foreground">SANGs Organizados</p>
           </div>
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
             <p className="text-2xl font-bold text-primary">0</p>
-            <p className="text-xs text-muted-foreground">SANGs Activos</p>
+            <p className="text-xs text-muted-foreground">Participaciones</p>
           </div>
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
             <p className="text-2xl font-bold text-success">100%</p>
@@ -165,43 +187,35 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Reputation History */}
+        {/* Activity History (Real) */}
         <div className="bg-card rounded-2xl p-5 shadow-card mb-6 animate-slide-up" style={{ animationDelay: "150ms" }}>
-          <h2 className="font-semibold mb-4">Historial de Reputación</h2>
+          <h2 className="font-semibold mb-4">Actividad Reciente (Organizador)</h2>
           <div className="space-y-3">
-            {mockReputationHistory.map((log) => (
-              <div key={log.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
-                <div
-                  className={cn(
-                    "h-8 w-8 rounded-lg flex items-center justify-center",
-                    log.change > 0 ? "bg-success/10" : "bg-destructive/10"
-                  )}
-                >
-                  {log.change > 0 ? (
-                    <TrendingUp className="h-4 w-4 text-success" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-destructive" />
-                  )}
+            {activityHistory.map((activity) => (
+              <div key={activity.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
+                <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary/10">
+                  <TrendingUp className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-sm">{log.reason}</p>
-                  <p className="text-xs text-muted-foreground">{log.sangName}</p>
+                  <p className="font-medium text-sm">Creación de SANG</p>
+                  <p className="text-xs text-muted-foreground">{activity.name}</p>
                 </div>
                 <div className="text-right">
-                  <p
-                    className={cn(
-                      "font-semibold",
-                      log.change > 0 ? "text-success" : "text-destructive"
-                    )}
-                  >
-                    {log.change > 0 ? "+" : ""}{log.change}
+                  <p className="font-semibold text-primary">
+                    RD$ {activity.contributionAmount?.toLocaleString()}
                   </p>
                   <p className="text-2xs text-muted-foreground">
-                    {log.date.toLocaleDateString("es-DO")}
+                    {activity.createdAt?.toDate ? activity.createdAt.toDate().toLocaleDateString("es-DO") : "Fecha desc."}
                   </p>
                 </div>
               </div>
             ))}
+            {activityHistory.length === 0 && !loadingHistory && (
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground">Aún no has organizado SANGs.</p>
+              </div>
+            )}
+            {loadingHistory && <p className="text-center text-sm">Cargando actividad...</p>}
           </div>
         </div>
 

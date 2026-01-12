@@ -35,17 +35,22 @@ export default function AdminDashboard() {
     latePaymentRatio: 0,
     averageReputation: 100,
   });
+
+  // Lists
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [recentSangs, setRecentSangs] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [allSangs, setAllSangs] = useState<any[]>([]);
+
   const [loadingConfig, setLoadingConfig] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Counts
         const usersColl = collection(db, "users");
         const sangsColl = collection(db, "sangs");
 
+        // 1. Stats and Counts
         const usersSnapshot = await getCountFromServer(usersColl);
         const activeSangsSnapshot = await getCountFromServer(query(sangsColl, where("status", "==", "active")));
 
@@ -55,17 +60,20 @@ export default function AdminDashboard() {
           activeSangs: activeSangsSnapshot.data().count
         }));
 
-        // 2. Recent Users
-        const recentUsersQuery = query(usersColl, orderBy("createdAt", "desc"), limit(5));
-        const recentUsersSnap = await getDocs(recentUsersQuery);
-        const users = recentUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setRecentUsers(users);
+        // 2. Fetch All Data (for lists)
+        // Note: For scalability, pagination should be added later.
+        const allUsersQuery = query(usersColl, orderBy("createdAt", "desc"));
+        const allUsersSnap = await getDocs(allUsersQuery);
+        const users = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // 3. Recent SANGs
-        const recentSangsQuery = query(sangsColl, orderBy("createdAt", "desc"), limit(5));
-        const recentSangsSnap = await getDocs(recentSangsQuery);
-        const sangs = recentSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setRecentSangs(sangs);
+        const allSangsQuery = query(sangsColl, orderBy("createdAt", "desc"));
+        const allSangsSnap = await getDocs(allSangsQuery);
+        const sangs = allSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        setAllUsers(users);
+        setAllSangs(sangs);
+        setRecentUsers(users.slice(0, 5));
+        setRecentSangs(sangs.slice(0, 5));
 
       } catch (error) {
         console.error("Error fetching admin data:", error);
@@ -228,18 +236,97 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Users Tab Placeholder */}
+        {/* Users Tab - Full List */}
         {activeTab === "users" && (
-          <div className="text-center py-10">
-            <p>Lista completa de usuarios (Implementación futura)</p>
-            <Button variant="link" onClick={() => setActiveTab("overview")}>Volver</Button>
+          <div className="bg-card rounded-2xl p-5 shadow-card animate-slide-up">
+            <h2 className="font-semibold mb-4">Todos los Usuarios ({stats.totalUsers})</h2>
+            <div className="space-y-3">
+              {allUsers.map((user) => (
+                <div key={user.id} className="flex items-center gap-4 p-4 bg-muted/50 rounded-xl">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="bg-accent text-accent-foreground">
+                      {getInitials(user.fullName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{user.fullName}</p>
+                      {user.role === 'admin' && <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">ADMIN</span>}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Unido el {user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                    </p>
+                  </div>
+                  <ReputationBadge score={user.reputationScore || 100} showTooltip={false} />
+                  <Button variant="outline" size="sm">
+                    Ver perfil
+                  </Button>
+                </div>
+              ))}
+              {allUsers.length === 0 && <p className="text-center text-muted-foreground py-8">No se encontraron usuarios.</p>}
+            </div>
           </div>
         )}
-        {/* SANGs Tab Placeholder */}
+
+        {/* SANGs Tab - Full List */}
         {activeTab === "sangs" && (
+          <div className="bg-card rounded-2xl p-5 shadow-card animate-slide-up">
+            <h2 className="font-semibold mb-4">Todos los SANGs ({stats.activeSangs})</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-sm text-muted-foreground border-b border-border">
+                    <th className="pb-3 font-medium">Nombre</th>
+                    <th className="pb-3 font-medium">Miembros</th>
+                    <th className="pb-3 font-medium">Estado</th>
+                    <th className="pb-3 font-medium text-right">Monto</th>
+                    <th className="pb-3 font-medium text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allSangs.map((sang) => (
+                    <tr key={sang.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="py-4 font-medium max-w-[200px] truncate">
+                        {sang.name}
+                        <br />
+                        <span className="text-xs text-muted-foreground font-normal">Code: {sang.inviteCode}</span>
+                      </td>
+                      <td className="py-4 text-muted-foreground">{sang.numberOfParticipants}</td>
+                      <td className="py-4">
+                        <StatusBadge status={sang.status} />
+                      </td>
+                      <td className="py-4 text-right font-medium">
+                        RD$ {sang.contributionAmount?.toLocaleString()}
+                        <span className="text-xs text-muted-foreground block">{sang.frequency}</span>
+                      </td>
+                      <td className="py-4 text-right">
+                        <Button variant="outline" size="sm">
+                          Ver detalles
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {allSangs.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center text-muted-foreground py-8">No se encontraron SANGs.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Payments Tab Placeholder */}
+        {activeTab === "payments" && (
           <div className="text-center py-10">
-            <p>Lista completa de SANGs (Implementación futura)</p>
-            <Button variant="link" onClick={() => setActiveTab("overview")}>Volver</Button>
+            <div className="bg-muted/30 rounded-2xl p-8 max-w-md mx-auto">
+              <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
+              <p className="font-medium mb-2">Historial de Pagos Global</p>
+              <p className="text-sm text-muted-foreground mb-4">Esta función requiere escanear todos los miembros de todos los SANGs activamente.</p>
+              <Button variant="outline" onClick={() => setActiveTab("overview")}>Volver al Resumen</Button>
+            </div>
           </div>
         )}
       </main>
