@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Link2, Users, DollarSign, Calendar, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,19 +14,30 @@ import type { SANG } from "@/types";
 
 export default function JoinSANG() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { currentUser } = useAuth();
-  const [inviteCode, setInviteCode] = useState("");
+
+  const [inviteCode, setInviteCode] = useState(searchParams.get("code") || "");
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"enter" | "preview" | "success">("enter");
   const [sangPreview, setSangPreview] = useState<SANG & { organizerName: string } | null>(null);
 
-  const handleSearch = async () => {
-    if (inviteCode.length < 6) return;
+  // Auto-trigger search if code came from URL
+  useEffect(() => {
+    const urlCode = searchParams.get("code");
+    if (urlCode && urlCode.length >= 6 && step === "enter") {
+      handleSearch(urlCode);
+    }
+  }, []);
+
+  const handleSearch = async (codeToUse?: string) => {
+    const code = codeToUse || inviteCode;
+    if (code.length < 6) return;
     setIsLoading(true);
 
     try {
-      const q = query(collection(db, "sangs"), where("inviteCode", "==", inviteCode));
+      const q = query(collection(db, "sangs"), where("inviteCode", "==", code));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
@@ -41,7 +52,7 @@ export default function JoinSANG() {
 
       const sangDoc = querySnapshot.docs[0];
       const sangData = sangDoc.data() as SANG;
-      sangData.id = sangDoc.id; // Ensure ID is part of data
+      sangData.id = sangDoc.id;
 
       // Fetch organizer name
       let organizerName = "Desconocido";
@@ -71,6 +82,7 @@ export default function JoinSANG() {
     setIsLoading(true);
 
     try {
+      // Check if already a member? (Optional safety)
       // Create request in members subcollection
       await setDoc(doc(db, `sangs/${sangPreview.id}/members`, currentUser.uid), {
         userId: currentUser.uid,
@@ -155,7 +167,7 @@ export default function JoinSANG() {
               variant="hero"
               size="lg"
               className="w-full"
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               disabled={inviteCode.length < 6 || isLoading}
             >
               {isLoading ? "Buscando..." : "Buscar SANG"}
@@ -195,7 +207,7 @@ export default function JoinSANG() {
                     <Calendar className="h-5 w-5" />
                     <span>Frecuencia</span>
                   </div>
-                  <span className="font-semibold capitalize">{sangPreview.frequencyLabel || sangPreview.frequency}</span>
+                  <span className="font-semibold capitalize">{sangPreview.frequency}</span>
                 </div>
 
                 <div className="flex items-center justify-between py-3 border-b border-border">
@@ -215,7 +227,7 @@ export default function JoinSANG() {
                   </div>
                   <span className="font-semibold">
                     {sangPreview.startDate instanceof Object && 'seconds' in sangPreview.startDate
-                      ? new Date(sangPreview.startDate.seconds * 1000).toLocaleDateString("es-DO")
+                      ? new Date((sangPreview.startDate as any).seconds * 1000).toLocaleDateString("es-DO")
                       : new Date(sangPreview.startDate).toLocaleDateString("es-DO")}
                   </span>
                 </div>

@@ -12,17 +12,22 @@ import {
   LogOut,
   Shield,
   Bell,
-  HelpCircle
+  HelpCircle,
+  Edit2,
+  Save,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { ReputationBadge } from "@/components/ReputationBadge";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, doc, updateDoc } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
   { icon: Bell, label: "Notificaciones", path: "/notifications" },
@@ -32,16 +37,25 @@ const menuItems = [
 
 export default function Profile() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { userProfile, loading } = useAuth();
+
+  // Activity History State
   const [activityHistory, setActivityHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Edit Mode State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    phoneNumber: ""
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
   const getInitials = (name: string) => {
     return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
+      ? name.split(" ").map((n) => n[0]).join("").toUpperCase()
+      : "U";
   };
 
   const handleLogout = async () => {
@@ -53,13 +67,22 @@ export default function Profile() {
     }
   };
 
-  // Fetch real activity history (SANGs organized)
+  // Initialize form when userProfile loads or edit mode opens
+  useEffect(() => {
+    if (userProfile) {
+      setEditForm({
+        fullName: userProfile.fullName || "",
+        phoneNumber: (userProfile as any).phoneNumber || ""
+      });
+    }
+  }, [userProfile]);
+
+  // Fetch real activity history
   useEffect(() => {
     const fetchHistory = async () => {
       if (!userProfile?.uid) return;
       setLoadingHistory(true);
       try {
-        // Get SANGs organized by user as history
         const q = query(
           collection(db, "sangs"),
           where("organizerId", "==", userProfile.uid),
@@ -77,6 +100,37 @@ export default function Profile() {
     fetchHistory();
   }, [userProfile]);
 
+  const handleSaveProfile = async () => {
+    if (!userProfile?.uid) return;
+    setIsSaving(true);
+    try {
+      const userRef = doc(db, "users", userProfile.uid);
+      await updateDoc(userRef, {
+        fullName: editForm.fullName,
+        phoneNumber: editForm.phoneNumber
+      });
+
+      toast({
+        title: "Perfil actualizado",
+        description: "Tu información se ha guardado correctamente.",
+      });
+      setIsEditing(false);
+      // Note: AuthContext might need a refresh logic or rely on real-time listener if implemented, 
+      // but simple page reload or optimistic UI can work. 
+      // For now, let's reload the page to be safe or assuming onAuthStateChanged picks it up if we force refresh? 
+      // Actually Firestore listener in AuthContext handles updates if configured.
+      window.location.reload();
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo actualizar el perfil.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -98,13 +152,10 @@ export default function Profile() {
     );
   }
 
-  // Safe user data object
-  const user = {
-    fullName: userProfile.fullName || "Usuario",
-    email: userProfile.email || "",
-    phoneNumber: "No registrado", // Placeholder
-    reputationScore: userProfile.reputationScore || 100,
-    createdAt: userProfile.createdAt && userProfile.createdAt.toDate ? userProfile.createdAt.toDate() : new Date(),
+  // Use editForm for display in edit mode, otherwise userProfile
+  const displayUser = isEditing ? editForm : {
+    fullName: userProfile.fullName,
+    phoneNumber: (userProfile as any).phoneNumber || "No registrado"
   };
 
   return (
@@ -113,16 +164,46 @@ export default function Profile() {
 
       <main className="container py-6 max-w-lg mx-auto">
         {/* Profile Header */}
-        <div className="text-center mb-8 animate-fade-in">
+        <div className="text-center mb-8 animate-fade-in relative">
+          <div className="absolute right-0 top-0">
+            {!isEditing ? (
+              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+                <Edit2 className="h-4 w-4 mr-1" /> Editar
+              </Button>
+            ) : (
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button variant="default" size="sm" onClick={handleSaveProfile} disabled={isSaving}>
+                  {isSaving ? "..." : <Save className="h-4 w-4" />}
+                </Button>
+              </div>
+            )}
+          </div>
+
           <Avatar className="h-24 w-24 mx-auto mb-4 ring-4 ring-accent">
             <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-              {getInitials(user.fullName)}
+              {getInitials(userProfile.fullName)}
             </AvatarFallback>
           </Avatar>
-          <h1 className="text-2xl font-bold">{user.fullName}</h1>
-          <p className="text-muted-foreground">{user.email}</p>
+
+          {isEditing ? (
+            <div className="max-w-xs mx-auto space-y-2">
+              <Input
+                value={editForm.fullName}
+                onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                placeholder="Nombre Completo"
+                className="text-center text-lg font-bold"
+              />
+            </div>
+          ) : (
+            <h1 className="text-2xl font-bold">{userProfile.fullName}</h1>
+          )}
+
+          <p className="text-muted-foreground">{userProfile.email}</p>
           <div className="mt-3">
-            <ReputationBadge score={user.reputationScore} size="lg" />
+            <ReputationBadge score={userProfile.reputationScore} size="lg" />
           </div>
         </div>
 
@@ -146,33 +227,56 @@ export default function Profile() {
         <div className="bg-card rounded-2xl p-5 shadow-card mb-6 animate-slide-up" style={{ animationDelay: "100ms" }}>
           <h2 className="font-semibold mb-4">Información Personal</h2>
           <div className="space-y-4">
+            {/* Name */}
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
                 <User className="h-5 w-5 text-primary" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Nombre completo</p>
-                <p className="font-medium">{user.fullName}</p>
+                {isEditing ? (
+                  <Input
+                    value={editForm.fullName}
+                    onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                    className="h-8 mt-1"
+                  />
+                ) : (
+                  <p className="font-medium">{displayUser.fullName}</p>
+                )}
               </div>
             </div>
+
+            {/* Email (Read Only) */}
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
                 <Mail className="h-5 w-5 text-primary" />
               </div>
-              <div>
+              <div className="opacity-70">
                 <p className="text-xs text-muted-foreground">Correo electrónico</p>
-                <p className="font-medium">{user.email}</p>
+                <p className="font-medium">{userProfile.email}</p>
               </div>
             </div>
+
+            {/* Phone */}
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
                 <Phone className="h-5 w-5 text-primary" />
               </div>
-              <div>
+              <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Teléfono</p>
-                <p className="font-medium">{user.phoneNumber}</p>
+                {isEditing ? (
+                  <Input
+                    value={editForm.phoneNumber}
+                    onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                    placeholder="809-000-0000"
+                    className="h-8 mt-1"
+                  />
+                ) : (
+                  <p className="font-medium">{displayUser.phoneNumber || "No registrado"}</p>
+                )}
               </div>
             </div>
+
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
                 <Calendar className="h-5 w-5 text-primary" />
@@ -180,14 +284,16 @@ export default function Profile() {
               <div>
                 <p className="text-xs text-muted-foreground">Miembro desde</p>
                 <p className="font-medium">
-                  {user.createdAt.toLocaleDateString("es-DO", { year: "numeric", month: "long" })}
+                  {userProfile.createdAt && userProfile.createdAt.toDate
+                    ? userProfile.createdAt.toDate().toLocaleDateString("es-DO", { year: "numeric", month: "long" })
+                    : "Fecha desconocida"}
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Activity History (Real) */}
+        {/* Activity History */}
         <div className="bg-card rounded-2xl p-5 shadow-card mb-6 animate-slide-up" style={{ animationDelay: "150ms" }}>
           <h2 className="font-semibold mb-4">Actividad Reciente (Organizador)</h2>
           <div className="space-y-3">

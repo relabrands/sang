@@ -1,17 +1,17 @@
-import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { 
-  ArrowLeft, 
-  Users, 
-  Calendar, 
-  DollarSign, 
-  Share2, 
-  Check, 
+import { useState, useEffect } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import {
+  ArrowLeft,
+  Users,
+  Calendar,
+  DollarSign,
+  Share2,
+  Check,
   Clock,
   AlertCircle,
-  ChevronRight,
   Copy,
-  Upload
+  Upload,
+  Shuffle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -21,75 +21,154 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ReputationBadge } from "@/components/ReputationBadge";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { PaymentStatus } from "@/types";
-
-// Mock data
-const mockSANG = {
-  id: "1",
-  name: "SANG Familia Pérez",
-  contributionAmount: 5000,
-  frequency: "Mensual",
-  numberOfParticipants: 10,
-  startDate: new Date("2024-01-15"),
-  status: "active" as const,
-  inviteCode: "SANG2024",
-  currentTurn: 3,
-  organizerId: "1",
-};
-
-const mockMembers = [
-  { id: "1", name: "Juan Pérez", turn: 1, status: "paid" as PaymentStatus, reputation: 100, isOrganizer: true },
-  { id: "2", name: "María García", turn: 2, status: "paid" as PaymentStatus, reputation: 95 },
-  { id: "3", name: "Carlos Rodríguez", turn: 3, status: "pending" as PaymentStatus, reputation: 88, isCurrentTurn: true },
-  { id: "4", name: "Ana Martínez", turn: 4, status: "pending" as PaymentStatus, reputation: 92 },
-  { id: "5", name: "Pedro López", turn: 5, status: "pending" as PaymentStatus, reputation: 100 },
-  { id: "6", name: "Lucía Fernández", turn: 6, status: "pending" as PaymentStatus, reputation: 85 },
-  { id: "7", name: "Miguel Santos", turn: 7, status: "pending" as PaymentStatus, reputation: 78 },
-  { id: "8", name: "Carmen Díaz", turn: 8, status: "pending" as PaymentStatus, reputation: 100 },
-  { id: "9", name: "José Ramírez", turn: 9, status: "pending" as PaymentStatus, reputation: 90 },
-  { id: "10", name: "Rosa Herrera", turn: 10, status: "pending" as PaymentStatus, reputation: 95 },
-];
+import type { PaymentStatus, SANG } from "@/types";
+import { db, auth } from "@/lib/firebase";
+import { doc, getDoc, collection, getDocs, updateDoc, setDoc, query, orderBy, where, serverTimestamp } from "firebase/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function SANGDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentUser, userProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<"timeline" | "members">("timeline");
-  const isOrganizer = true; // Mock - would come from auth context
+
+  const [sang, setSang] = useState<SANG | null>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [organizerName, setOrganizerName] = useState("");
+  const [isRandomizing, setIsRandomizing] = useState(false);
+
+  // Fetch SANG and Members
+  useEffect(() => {
+    if (!id || !currentUser) return;
+
+    const fetchData = async () => {
+      try {
+        // 1. Fetch SANG Details
+        const sangDoc = await getDoc(doc(db, "sangs", id));
+        if (!sangDoc.exists()) {
+          toast({ title: "Error", description: "SANG no encontrado", variant: "destructive" });
+          navigate("/dashboard");
+          return;
+        }
+        const sangData = { id: sangDoc.id, ...sangDoc.data() } as SANG;
+
+        // Convert Timestamps
+        if ((sangData.startDate as any)?.toDate) {
+          sangData.startDate = (sangData.startDate as any).toDate();
+        } else {
+          sangData.startDate = new Date(sangData.startDate);
+        }
+
+        setSang(sangData);
+
+        // 2. Fetch Members
+        // We need member details (names), so we'll fetch the subcollection and then the user profiles
+        const membersSnapshot = await getDocs(query(collection(db, `sangs/${id}/members`), orderBy("turnNumber", "asc")));
+        const membersData = await Promise.all(membersSnapshot.docs.map(async (memberDoc) => {
+          const mData = memberDoc.data();
+          const userDoc = await getDoc(doc(db, "users", mData.userId));
+          const userData = userDoc.exists() ? userDoc.data() : {};
+          return {
+            id: memberDoc.id, // member doc id (usually uid)
+            ...mData,
+            name: userData.fullName || "Usuario",
+            reputation: userData.reputationScore || 100,
+            isOrganizer: mData.role === 'organizer'
+          };
+        }));
+        setMembers(membersData);
+
+        // 3. Get Organizer Name specifically for display if needed
+        if (sangData.organizerId) {
+          const orgDoc = await getDoc(doc(db, "users", sangData.organizerId));
+          if (orgDoc.exists()) setOrganizerName(orgDoc.data().fullName);
+        }
+
+      } catch (error) {
+        console.error("Error fetching SANG details:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [id, currentUser, navigate, toast]);
+
+  const isOrganizer = currentUser && sang?.organizerId === currentUser.uid;
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(mockSANG.inviteCode);
+    if (!sang) return;
+    navigator.clipboard.writeText(sang.inviteCode);
     toast({
       title: "Código copiado",
       description: "El código de invitación ha sido copiado al portapapeles.",
     });
   };
 
-  const handleMarkPayment = (memberId: string) => {
+  const handleShareLink = () => {
+    if (!sang) return;
+    const link = `${window.location.origin}/join-sang?code=${sang.inviteCode}`;
+    navigator.clipboard.writeText(link);
     toast({
-      title: "Pago registrado",
-      description: "El pago ha sido marcado como completado.",
+      title: "Enlace copiado",
+      description: "Comparte este enlace para que se unan directamente.",
     });
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase();
+  // Randomize Turns Logic
+  const handleRandomizeTurns = async () => {
+    if (!sang || !isOrganizer) return;
+
+    // Basic validation: Check if enough members are approved/joined? 
+    // For now, we assume user knows when to run it (usually when full).
+    setIsRandomizing(true);
+    try {
+      // 1. Shuffle members
+      const membersIds = members.map(m => m.id);
+      const shuffled = [...membersIds].sort(() => Math.random() - 0.5);
+
+      // 2. Update each member doc with new turn number
+      const updates = shuffled.map((uid, index) => {
+        const turn = index + 1;
+        return updateDoc(doc(db, `sangs/${sang.id}/members`, uid), {
+          turnNumber: turn
+        });
+      });
+      await Promise.all(updates);
+
+      // 3. Update SANG status to active? Or just turns assigned?
+      // If all turns assigned, user can manually start or we set status.
+      // Let's assume re-fetch will show new order.
+      toast({ title: "Turnos asignados", description: "Los turnos se han mezclado aleatoriamente." });
+
+      // Refresh page lightly (or re-fetch)
+      window.location.reload();
+
+    } catch (error) {
+      console.error("Error randomizing turns:", error);
+      toast({ variant: "destructive", title: "Error", description: "No se pudieron asignar los turnos." });
+    } finally {
+      setIsRandomizing(false);
+    }
   };
+
+  const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").toUpperCase();
 
   const getStatusIcon = (status: PaymentStatus) => {
     switch (status) {
-      case "paid":
-        return <Check className="h-4 w-4 text-success" />;
-      case "pending":
-        return <Clock className="h-4 w-4 text-warning" />;
-      case "late":
-        return <AlertCircle className="h-4 w-4 text-destructive" />;
+      case "paid": return <Check className="h-4 w-4 text-success" />;
+      case "pending": return <Clock className="h-4 w-4 text-warning" />;
+      case "late": return <AlertCircle className="h-4 w-4 text-destructive" />;
+      default: return null;
     }
   };
+
+  if (loading) return <div className="min-h-screen flex justify-center items-center">Cargando detalles...</div>;
+  if (!sang) return <div className="min-h-screen flex justify-center items-center">SANG no encontrado</div>;
+
+  const currentMemberTurn = members.find(m => m.turnNumber === sang.currentTurn);
 
   return (
     <div className="min-h-screen bg-muted/30 pb-20 md:pb-8">
@@ -98,12 +177,7 @@ export default function SANGDetail() {
       <main className="container py-6 max-w-2xl mx-auto">
         {/* Header */}
         <div className="mb-6 animate-fade-in">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(-1)}
-            className="gap-2 mb-4"
-          >
+          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="gap-2 mb-4">
             <ArrowLeft className="h-4 w-4" />
             Volver
           </Button>
@@ -113,10 +187,10 @@ export default function SANGDetail() {
         <div className="bg-card rounded-2xl p-6 shadow-card mb-6 animate-slide-up">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-xl font-bold mb-1">{mockSANG.name}</h1>
-              <StatusBadge status={mockSANG.status} size="md" />
+              <h1 className="text-xl font-bold mb-1">{sang.name}</h1>
+              <StatusBadge status={sang.status} size="md" />
             </div>
-            <Button variant="ghost" size="icon" onClick={handleCopyCode}>
+            <Button variant="ghost" size="icon" onClick={handleShareLink}>
               <Share2 className="h-5 w-5" />
             </Button>
           </div>
@@ -125,50 +199,68 @@ export default function SANGDetail() {
             <div className="text-center">
               <DollarSign className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
               <p className="text-sm text-muted-foreground">Aporte</p>
-              <p className="font-semibold">RD$ {mockSANG.contributionAmount.toLocaleString()}</p>
+              <p className="font-semibold">RD$ {sang.contributionAmount.toLocaleString()}</p>
             </div>
             <div className="text-center">
               <Calendar className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
               <p className="text-sm text-muted-foreground">Frecuencia</p>
-              <p className="font-semibold">{mockSANG.frequency}</p>
+              <p className="font-semibold capitalize">{sang.frequency}</p>
             </div>
             <div className="text-center">
               <Users className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
               <p className="text-sm text-muted-foreground">Miembros</p>
-              <p className="font-semibold">{mockSANG.numberOfParticipants}</p>
+              <p className="font-semibold">{members.length} / {sang.numberOfParticipants}</p>
             </div>
           </div>
 
-          {/* Invite Code */}
+          {/* Invite Code & Share */}
           <div className="mt-4 p-3 bg-accent rounded-xl flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Código de invitación</p>
-              <p className="font-mono font-bold text-lg">{mockSANG.inviteCode}</p>
+              <p className="font-mono font-bold text-lg">{sang.inviteCode}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleCopyCode}>
-              <Copy className="h-4 w-4 mr-2" />
-              Copiar
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={handleCopyCode}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copiar
+              </Button>
+            </div>
           </div>
+
+          {/* Randomize Button for Organizer */}
+          {isOrganizer && sang.status === 'pending' && (
+            <Button
+              variant="outline"
+              className="w-full mt-4"
+              onClick={handleRandomizeTurns}
+              disabled={isRandomizing || members.length < 2}
+            >
+              <Shuffle className="h-4 w-4 mr-2" />
+              {isRandomizing ? "Mezclando..." : "Mezclar Turnos Aleatoriamente"}
+            </Button>
+          )}
+
         </div>
 
         {/* Current Turn Highlight */}
-        <div className="gradient-primary rounded-2xl p-5 mb-6 animate-slide-up" style={{ animationDelay: "100ms" }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-primary-foreground/80 text-sm">Turno Actual</p>
-              <p className="text-primary-foreground text-2xl font-bold">
-                #{mockSANG.currentTurn} - Carlos Rodríguez
-              </p>
-              <p className="text-primary-foreground/70 text-sm mt-1">
-                Recibe RD$ {(mockSANG.contributionAmount * mockSANG.numberOfParticipants).toLocaleString()}
-              </p>
-            </div>
-            <div className="h-16 w-16 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
-              <span className="text-primary-foreground text-2xl font-bold">3</span>
+        {sang.status === 'active' && currentMemberTurn && (
+          <div className="gradient-primary rounded-2xl p-5 mb-6 animate-slide-up" style={{ animationDelay: "100ms" }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-primary-foreground/80 text-sm">Turno Actual</p>
+                <p className="text-primary-foreground text-2xl font-bold">
+                  #{sang.currentTurn} - {currentMemberTurn.name}
+                </p>
+                <p className="text-primary-foreground/70 text-sm mt-1">
+                  Recibe RD$ {(sang.contributionAmount * sang.numberOfParticipants).toLocaleString()}
+                </p>
+              </div>
+              <div className="h-16 w-16 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
+                <span className="text-primary-foreground text-2xl font-bold">{sang.currentTurn}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-2 mb-4 animate-slide-up" style={{ animationDelay: "150ms" }}>
@@ -188,104 +280,46 @@ export default function SANGDetail() {
           </Button>
         </div>
 
-        {/* Timeline View */}
-        {activeTab === "timeline" && (
-          <div className="space-y-3 animate-fade-in">
-            {mockMembers.map((member, index) => (
-              <div
-                key={member.id}
-                className={cn(
-                  "bg-card rounded-xl p-4 shadow-card flex items-center gap-4 transition-all",
-                  member.isCurrentTurn && "ring-2 ring-primary"
-                )}
-              >
-                <div className="relative">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback
-                      className={cn(
-                        "text-sm font-semibold",
-                        member.turn <= mockSANG.currentTurn
-                          ? "bg-success/10 text-success"
-                          : "bg-muted"
-                      )}
-                    >
-                      {getInitials(member.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-card border-2 border-border flex items-center justify-center text-xs font-bold">
-                    {member.turn}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{member.name}</p>
-                    {member.isOrganizer && (
-                      <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                        Organizador
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {getStatusIcon(member.status)}
-                    <span className="capitalize">{member.status === "paid" ? "Pagado" : member.status === "pending" ? "Pendiente" : "Tardío"}</span>
-                  </div>
-                </div>
-                {member.isCurrentTurn && (
-                  <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
-                    Turno actual
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Members View */}
-        {activeTab === "members" && (
-          <div className="space-y-3 animate-fade-in">
-            {mockMembers.map((member) => (
-              <div
-                key={member.id}
-                className="bg-card rounded-xl p-4 shadow-card flex items-center gap-4"
-              >
+        {/* Timeline/Member List */}
+        <div className="space-y-3 animate-fade-in">
+          {members.map((member) => (
+            <div
+              key={member.id}
+              className={cn(
+                "bg-card rounded-xl p-4 shadow-card flex items-center gap-4 transition-all",
+                sang.currentTurn === member.turnNumber && sang.status === 'active' && "ring-2 ring-primary"
+              )}
+            >
+              <div className="relative">
                 <Avatar className="h-12 w-12">
-                  <AvatarFallback className="bg-accent text-accent-foreground">
+                  <AvatarFallback className={cn("text-sm font-semibold bg-muted")}>
                     {getInitials(member.name)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{member.name}</p>
-                    {member.isOrganizer && (
-                      <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                        Organizador
-                      </span>
-                    )}
+                {member.turnNumber > 0 && (
+                  <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-card border-2 border-border flex items-center justify-center text-xs font-bold">
+                    {member.turnNumber}
                   </div>
-                  <p className="text-sm text-muted-foreground">Turno #{member.turn}</p>
-                </div>
-                <ReputationBadge score={member.reputation} size="sm" showTooltip={false} />
+                )}
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Organizer Actions */}
-        {isOrganizer && (
-          <div className="fixed bottom-20 md:bottom-6 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent">
-            <div className="container max-w-2xl mx-auto">
-              <div className="bg-card rounded-xl p-4 shadow-elevated flex gap-3">
-                <Button variant="outline" className="flex-1">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Subir Comprobante
-                </Button>
-                <Button variant="hero" className="flex-1">
-                  Marcar Pagos
-                </Button>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{member.name}</p>
+                  {member.isOrganizer && (
+                    <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                      Organizador
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {getStatusIcon(member.status || "pending")}
+                  <span className="capitalize">{member.status === "paid" ? "Pagado" : "Pendiente"}</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          ))}
+          {members.length === 0 && <p className="text-center text-muted-foreground">Esperando miembros...</p>}
+        </div>
       </main>
 
       <BottomNav />
