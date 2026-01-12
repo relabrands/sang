@@ -31,11 +31,19 @@ export default function Login() {
       const adminDoc = await getDoc(doc(db, "admins", user.uid));
 
       let targetMeta = "/dashboard";
-      if (adminDoc.exists()) {
-        targetMeta = "/admin";
-      } else if (userDoc.exists()) {
+      const isAdminInCollection = adminDoc.exists();
+      let isAdminInProfile = false;
+
+      if (userDoc.exists()) {
         const userData = userDoc.data();
-        if (userData.role === 'admin') targetMeta = "/admin";
+        if (userData.role === 'admin') isAdminInProfile = true;
+      }
+
+      if (isAdminInCollection || isAdminInProfile) {
+        targetMeta = "/admin";
+        // CRITICAL: Force refresh token to pick up new claims from Cloud Function
+        // This ensures AuthContext sees 'admin' role immediately
+        await user.getIdToken(true);
       }
 
       toast({
