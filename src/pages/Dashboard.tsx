@@ -11,7 +11,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, collectionGroup, getDoc, doc, deleteDoc } from "firebase/firestore";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { DashboardCard } from "@/components/DashboardCard";
@@ -24,6 +24,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { userProfile, loading: authLoading, currentUser } = useAuth();
   const [sangs, setSangs] = useState<SANG[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [loadingSangs, setLoadingSangs] = useState(true);
 
   useEffect(() => {
@@ -31,24 +32,71 @@ export default function Dashboard() {
       if (!currentUser) return;
 
       try {
-        // Fetch SANGs where user is organizer
-        // Note: Ideally we also fetch where user is a member. 
-        // For now, this validates the 'Create SANG' flow working in production.
+        const fetchedSangs: any[] = [];
+        const pending: any[] = [];
+        const processedSangIds = new Set();
+
+        // 1. Organizer SANGs
         const qOrganizer = query(
           collection(db, "sangs"),
           where("organizerId", "==", currentUser.uid)
         );
-
         const organizerSnapshot = await getDocs(qOrganizer);
-        const fetchedSangs = organizerSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          // Ensure dates are converted from Timestamp if needed
-          startDate: doc.data().startDate?.toDate ? doc.data().startDate.toDate() : new Date(doc.data().startDate),
-          createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate() : new Date(),
-        } as SANG));
+        organizerSnapshot.docs.forEach(doc => {
+          if (!processedSangIds.has(doc.id)) {
+            fetchedSangs.push({ id: doc.id, ...doc.data() });
+            processedSangIds.add(doc.id);
+          }
+        });
 
-        setSangs(fetchedSangs);
+        // 2. Member SANGs (Requests & Active)
+        try {
+          const membershipsQ = query(collectionGroup(db, 'members'), where('userId', '==', currentUser.uid));
+          const membershipSnap = await getDocs(membershipsQ);
+
+          const memPromises = membershipSnap.docs.map(async (memDoc) => {
+            const data = memDoc.data();
+            const sangDocRef = memDoc.ref.parent.parent;
+            if (!sangDocRef) return;
+
+            if (data.status === 'pending') {
+              // Pending Request
+              const sangSnap = await getDoc(sangDocRef);
+              if (sangSnap.exists()) {
+                pending.push({
+                  requestId: memDoc.id,
+                  sangId: sangSnap.id,
+                  sangName: sangSnap.data().name,
+                  ...data
+                });
+              }
+            } else if (data.status === 'active' || !data.status) {
+              // Active Member
+              if (!processedSangIds.has(sangDocRef.id)) {
+                const sangSnap = await getDoc(sangDocRef);
+                if (sangSnap.exists()) {
+                  processedSangIds.add(sangSnap.id);
+                  fetchedSangs.push({ id: sangSnap.id, ...sangSnap.data() });
+                }
+              }
+            }
+          });
+          await Promise.all(memPromises);
+
+        } catch (e) {
+          console.error("Error fetching memberships (index check):", e);
+        }
+
+        // Process Dates
+        const finalSangs = fetchedSangs.map(s => ({
+          ...s,
+          startDate: s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate || Date.now()),
+          createdAt: s.createdAt?.toDate ? s.createdAt.toDate() : new Date(),
+        })) as SANG[];
+
+        setSangs(finalSangs);
+        setPendingRequests(pending);
+
       } catch (error) {
         console.error("Error fetching SANGs:", error);
       } finally {
@@ -68,15 +116,22 @@ export default function Dashboard() {
     }
   };
 
+  const cancelRequest = async (sangId: string) => {
+    try {
+      if (!currentUser) return;
+      await deleteDoc(doc(db, `sangs/${sangId}/members`, currentUser.uid));
+      setPendingRequests(prev => prev.filter(p => p.sangId !== sangId));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   if (authLoading || loadingSangs) {
     return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
   }
 
-  // Use userProfile data or fallbacks
   const displayName = userProfile?.fullName || currentUser?.email?.split('@')[0] || "Usuario";
   const displayScore = userProfile?.reputationScore || 100;
-
-  // Construct a partial user object for Header if needed
   const headerUser = userProfile ? (userProfile as unknown as User) : undefined;
 
   return (
@@ -114,6 +169,31 @@ export default function Dashboard() {
             variant="warning"
           />
         </section>
+
+        {/* Pending Requests */}
+        {pendingRequests.length > 0 && (
+          <section className="animate-slide-up">
+            <h2 className="text-lg font-semibold mb-3">Solicitudes Enviadas</h2>
+            <div className="space-y-3">
+              {pendingRequests.map(req => (
+                <div key={req.sangId} className="bg-card p-4 rounded-xl shadow-sm flex items-center justify-between border border-primary/20">
+                  <div>
+                    <p className="font-medium">{req.sangName}</p>
+                    <p className="text-xs text-muted-foreground">Esperando aprobación</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10"
+                    onClick={() => cancelRequest(req.sangId)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Quick Actions */}
         <section className="grid grid-cols-2 gap-4 animate-slide-up" style={{ animationDelay: "200ms" }}>

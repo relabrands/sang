@@ -49,8 +49,33 @@ export default function CreateSANG() {
     turnAssignment: "random" as TurnAssignment,
   });
 
+  const nextStep = () => setStep(step + 1);
+  const prevStep = () => setStep(step - 1);
+
+  const isStepValid = () => {
+    switch (step) {
+      case 1:
+        return form.name.length >= 3;
+      case 2:
+        return form.contributionAmount && parseInt(form.contributionAmount) >= 100;
+      case 3:
+        return form.numberOfParticipants && parseInt(form.numberOfParticipants) >= 2;
+      case 4:
+        return form.startDate;
+      default:
+        return true;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Protection: If not on step 5, just go to next step
+    if (step !== 5) {
+      if (isStepValid()) nextStep();
+      return;
+    }
+
     if (!currentUser) return;
 
     setIsLoading(true);
@@ -98,24 +123,6 @@ export default function CreateSANG() {
       });
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const nextStep = () => setStep(step + 1);
-  const prevStep = () => setStep(step - 1);
-
-  const isStepValid = () => {
-    switch (step) {
-      case 1:
-        return form.name.length >= 3;
-      case 2:
-        return form.contributionAmount && parseInt(form.contributionAmount) >= 100;
-      case 3:
-        return form.numberOfParticipants && parseInt(form.numberOfParticipants) >= 2;
-      case 4:
-        return form.startDate;
-      default:
-        return true;
     }
   };
 
@@ -214,8 +221,8 @@ export default function CreateSANG() {
                     <label
                       key={option.value}
                       className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${form.frequency === option.value
-                          ? "border-primary bg-accent"
-                          : "border-border hover:border-primary/50"
+                        ? "border-primary bg-accent"
+                        : "border-border hover:border-primary/50"
                         }`}
                     >
                       <RadioGroupItem value={option.value} />
@@ -296,8 +303,8 @@ export default function CreateSANG() {
                       type="button"
                       onClick={() => setForm({ ...form, turnAssignment: option.value as TurnAssignment })}
                       className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${form.turnAssignment === option.value
-                          ? "border-primary bg-accent"
-                          : "border-border hover:border-primary/50"
+                        ? "border-primary bg-accent"
+                        : "border-border hover:border-primary/50"
                         }`}
                     >
                       <option.icon className="h-6 w-6 text-primary" />

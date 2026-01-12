@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { PaymentStatus, SANG } from "@/types";
 import { db, auth } from "@/lib/firebase";
-import { doc, getDoc, collection, getDocs, updateDoc, setDoc, query, orderBy, where, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, updateDoc, setDoc, query, orderBy, where, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function SANGDetail() {
@@ -35,6 +35,7 @@ export default function SANGDetail() {
 
   const [sang, setSang] = useState<SANG | null>(null);
   const [members, setMembers] = useState<any[]>([]);
+  const [pendingMembers, setPendingMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [organizerName, setOrganizerName] = useState("");
   const [isRandomizing, setIsRandomizing] = useState(false);
@@ -63,24 +64,42 @@ export default function SANGDetail() {
 
         setSang(sangData);
 
-        // 2. Fetch Members
-        // We need member details (names), so we'll fetch the subcollection and then the user profiles
-        const membersSnapshot = await getDocs(query(collection(db, `sangs/${id}/members`), orderBy("turnNumber", "asc")));
-        const membersData = await Promise.all(membersSnapshot.docs.map(async (memberDoc) => {
+        // 2. Fetch Members (All)
+        // Note: Sort by turnNumber is reliable for active members, maybe not pending.
+        const membersSnapshot = await getDocs(query(collection(db, `sangs/${id}/members`)));
+
+        const allMembers = await Promise.all(membersSnapshot.docs.map(async (memberDoc) => {
           const mData = memberDoc.data();
-          const userDoc = await getDoc(doc(db, "users", mData.userId));
-          const userData = userDoc.exists() ? userDoc.data() : {};
+          let name = "Usuario";
+          let reputation = 100;
+
+          if (mData.name) {
+            name = mData.name;
+          } else {
+            const userDoc = await getDoc(doc(db, "users", mData.userId));
+            if (userDoc.exists()) {
+              name = userDoc.data().fullName || "Usuario";
+              reputation = userDoc.data().reputationScore || 100;
+            }
+          }
+
           return {
-            id: memberDoc.id, // member doc id (usually uid)
+            id: memberDoc.id,
             ...mData,
-            name: userData.fullName || "Usuario",
-            reputation: userData.reputationScore || 100,
+            name,
+            reputation,
             isOrganizer: mData.role === 'organizer'
           };
         }));
-        setMembers(membersData);
 
-        // 3. Get Organizer Name specifically for display if needed
+        // Sort active members by turn
+        const active = allMembers.filter(m => m.status === 'active' || m.status === 'approved' || !m.status);
+        active.sort((a, b) => (a.turnNumber || 0) - (b.turnNumber || 0));
+
+        setMembers(active);
+        setPendingMembers(allMembers.filter(m => m.status === 'pending'));
+
+        // 3. Get Organizer Name
         if (sangData.organizerId) {
           const orgDoc = await getDoc(doc(db, "users", sangData.organizerId));
           if (orgDoc.exists()) setOrganizerName(orgDoc.data().fullName);
@@ -97,6 +116,7 @@ export default function SANGDetail() {
   }, [id, currentUser, navigate, toast]);
 
   const isOrganizer = currentUser && sang?.organizerId === currentUser.uid;
+  const isAdmin = userProfile?.role === 'admin';
 
   const handleCopyCode = () => {
     if (!sang) return;
@@ -117,19 +137,13 @@ export default function SANGDetail() {
     });
   };
 
-  // Randomize Turns Logic
   const handleRandomizeTurns = async () => {
     if (!sang || !isOrganizer) return;
-
-    // Basic validation: Check if enough members are approved/joined? 
-    // For now, we assume user knows when to run it (usually when full).
     setIsRandomizing(true);
     try {
-      // 1. Shuffle members
       const membersIds = members.map(m => m.id);
       const shuffled = [...membersIds].sort(() => Math.random() - 0.5);
 
-      // 2. Update each member doc with new turn number
       const updates = shuffled.map((uid, index) => {
         const turn = index + 1;
         return updateDoc(doc(db, `sangs/${sang.id}/members`, uid), {
@@ -137,20 +151,40 @@ export default function SANGDetail() {
         });
       });
       await Promise.all(updates);
-
-      // 3. Update SANG status to active? Or just turns assigned?
-      // If all turns assigned, user can manually start or we set status.
-      // Let's assume re-fetch will show new order.
       toast({ title: "Turnos asignados", description: "Los turnos se han mezclado aleatoriamente." });
-
-      // Refresh page lightly (or re-fetch)
       window.location.reload();
-
     } catch (error) {
       console.error("Error randomizing turns:", error);
       toast({ variant: "destructive", title: "Error", description: "No se pudieron asignar los turnos." });
     } finally {
       setIsRandomizing(false);
+    }
+  };
+
+  const handleAcceptMember = async (memberId: string) => {
+    if (!sang) return;
+    try {
+      if (members.length >= sang.numberOfParticipants) {
+        toast({ variant: "destructive", title: "Lleno", description: "El SANG está lleno." });
+        return;
+      }
+      await updateDoc(doc(db, `sangs/${sang.id}/members`, memberId), { status: "active", joinedAt: serverTimestamp() });
+      toast({ title: "Aceptado", description: "Miembro añadido." });
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Error", description: "Error al aceptar." });
+    }
+  };
+
+  const handleRejectMember = async (memberId: string) => {
+    if (!sang) return;
+    try {
+      await deleteDoc(doc(db, `sangs/${sang.id}/members`, memberId));
+      setPendingMembers(prev => prev.filter(m => m.id !== memberId));
+      toast({ title: "Rechazado", description: "Solicitud eliminada." });
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -175,7 +209,6 @@ export default function SANGDetail() {
       <Header />
 
       <main className="container py-6 max-w-2xl mx-auto">
-        {/* Header */}
         <div className="mb-6 animate-fade-in">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="gap-2 mb-4">
             <ArrowLeft className="h-4 w-4" />
@@ -213,7 +246,6 @@ export default function SANGDetail() {
             </div>
           </div>
 
-          {/* Invite Code & Share */}
           <div className="mt-4 p-3 bg-accent rounded-xl flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Código de invitación</p>
@@ -227,7 +259,6 @@ export default function SANGDetail() {
             </div>
           </div>
 
-          {/* Randomize Button for Organizer */}
           {isOrganizer && sang.status === 'pending' && (
             <Button
               variant="outline"
@@ -241,6 +272,67 @@ export default function SANGDetail() {
           )}
 
         </div>
+
+        {/* Admin Robust View */}
+        {isAdmin && (
+          <div className="bg-destructive/5 border-2 border-destructive/20 rounded-2xl p-5 mb-6 animate-fade-in">
+            <div className="flex items-center gap-2 mb-4 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              <h2 className="font-bold">Panel de Control Admin</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">ID del SANG</p>
+                <p className="font-mono text-xs max-w-full overflow-hidden text-ellipsis">{sang.id}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Organizador ID</p>
+                <p className="font-mono text-xs max-w-full overflow-hidden text-ellipsis">{sang.organizerId}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recaudación Total</p>
+                <p className="font-semibold">RD$ {(sang.contributionAmount * sang.numberOfParticipants * sang.numberOfParticipants).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Riesgo Calculado</p>
+                <p className="font-bold text-success">Bajo</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending Requests Section (Organizer Only) */}
+        {isOrganizer && pendingMembers.length > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 mb-6 animate-slide-up">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="h-5 w-5 text-primary" />
+              <h2 className="font-bold text-primary">Solicitudes de Unión ({pendingMembers.length})</h2>
+            </div>
+            <div className="space-y-3">
+              {pendingMembers.map((member) => (
+                <div key={member.id} className="flex items-center justify-between p-3 bg-background rounded-xl shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback>{member.name ? member.name[0] : "U"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-sm">{member.name || "Usuario"}</p>
+                      <p className="text-xs text-muted-foreground">Quiere unirse</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => handleRejectMember(member.id)}>
+                      Rechazar
+                    </Button>
+                    <Button size="sm" className="bg-success hover:bg-success/90 text-white" onClick={() => handleAcceptMember(member.id)}>
+                      Aceptar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Current Turn Highlight */}
         {sang.status === 'active' && currentMemberTurn && (
