@@ -33,30 +33,25 @@ exports.processSignUp = functions.auth.user().onCreate(async (user) => {
     }
 });
 
-// 2. Trigger: When an Admin is added to 'admins' collection, update their Custom Claims
-exports.onAdminCreated = functions.firestore
+// 2. Trigger: When 'admins' collection is written to (Create, Update, Delete)
+// This handles setting AND revoking admin privileges dynamically
+exports.onAdminChange = functions.firestore
     .document("admins/{adminId}")
-    .onCreate(async (snap, context) => {
+    .onWrite(async (change, context) => {
         const adminId = context.params.adminId;
+        const exists = change.after.exists;
 
         try {
-            await admin.auth().setCustomUserClaims(adminId, { role: "admin" });
-            console.log(`Successfully granted admin privileges to ${adminId}`);
+            if (exists) {
+                // Admin created or updated -> Grant Granular Admin Privileges
+                await admin.auth().setCustomUserClaims(adminId, { role: "admin" });
+                console.log(`Granted admin privileges to ${adminId}`);
+            } else {
+                // Admin deleted -> Revoke
+                await admin.auth().setCustomUserClaims(adminId, { role: "user" });
+                console.log(`Revoked admin privileges from ${adminId}`);
+            }
         } catch (error) {
-            console.error("Error setting admin claims:", error);
-        }
-    });
-
-// 3. Trigger: When an Admin is removed, revoke privileges
-exports.onAdminDeleted = functions.firestore
-    .document("admins/{adminId}")
-    .onDelete(async (snap, context) => {
-        const adminId = context.params.adminId;
-
-        try {
-            await admin.auth().setCustomUserClaims(adminId, { role: "user" });
-            console.log(`Successfully revoked admin privileges from ${adminId}`);
-        } catch (error) {
-            console.error("Error removing admin claims:", error);
+            console.error("Error managing admin claims:", error);
         }
     });
