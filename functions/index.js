@@ -1,32 +1,62 @@
-/**
- * Import function triggers from their respective submodules:
- *
- * const {onCall} = require("firebase-functions/v2/https");
- * const {onDocumentWritten} = require("firebase-functions/v2/firestore");
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
- */
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
 
-const {setGlobalOptions} = require("firebase-functions");
-const {onRequest} = require("firebase-functions/https");
-const logger = require("firebase-functions/logger");
+admin.initializeApp();
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+// 1. On New User Sign Up: Set default role 'user'
+exports.processSignUp = functions.auth.user().onCreate(async (user) => {
+    const customClaims = {
+        role: "user",
+    };
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+    try {
+        // Set custom user claims on this newly created user.
+        await admin.auth().setCustomUserClaims(user.uid, customClaims);
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+        // Create a user document in Firestore for consistency if not done by frontend
+        const userRef = admin.firestore().collection("users").doc(user.uid);
+        const snapshot = await userRef.get();
+
+        if (!snapshot.exists) {
+            await userRef.set({
+                uid: user.uid,
+                email: user.email,
+                role: "user",
+                reputationScore: 100, // Default score
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                fullName: user.displayName || "Usuario Nuevo"
+            });
+        }
+
+    } catch (error) {
+        console.error(error);
+    }
+});
+
+// 2. Trigger: When an Admin is added to 'admins' collection, update their Custom Claims
+exports.onAdminCreated = functions.firestore
+    .document("admins/{adminId}")
+    .onCreate(async (snap, context) => {
+        const adminId = context.params.adminId;
+
+        try {
+            await admin.auth().setCustomUserClaims(adminId, { role: "admin" });
+            console.log(`Successfully granted admin privileges to ${adminId}`);
+        } catch (error) {
+            console.error("Error setting admin claims:", error);
+        }
+    });
+
+// 3. Trigger: When an Admin is removed, revoke privileges
+exports.onAdminDeleted = functions.firestore
+    .document("admins/{adminId}")
+    .onDelete(async (snap, context) => {
+        const adminId = context.params.adminId;
+
+        try {
+            await admin.auth().setCustomUserClaims(adminId, { role: "user" });
+            console.log(`Successfully revoked admin privileges from ${adminId}`);
+        } catch (error) {
+            console.error("Error removing admin claims:", error);
+        }
+    });
