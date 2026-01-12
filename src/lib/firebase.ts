@@ -14,6 +14,15 @@ const firebaseConfig = {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
+// Debug check for missing config in production
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    console.warn("⚠️ Firebase Config appears incomplete. Check your environment variables.", {
+        apiKeyProvided: !!firebaseConfig.apiKey,
+        projectIdProvided: !!firebaseConfig.projectId,
+        authDomainProvided: !!firebaseConfig.authDomain
+    });
+}
+
 // Prevent re-initialization (Next.js safe)
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
