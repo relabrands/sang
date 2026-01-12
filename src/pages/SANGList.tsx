@@ -1,76 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Filter } from "lucide-react";
+import { Plus, Filter, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { SANGCard } from "@/components/SANGCard";
 import type { SANG, SANGStatus } from "@/types";
-
-// Mock data
-const mockSangs: SANG[] = [
-  {
-    id: "1",
-    name: "SANG Familia Pérez",
-    contributionAmount: 5000,
-    frequency: "monthly",
-    numberOfParticipants: 10,
-    startDate: new Date("2024-01-15"),
-    turnAssignment: "random",
-    organizerId: "1",
-    status: "active",
-    inviteCode: "ABC123",
-    createdAt: new Date(),
-    currentTurn: 3,
-  },
-  {
-    id: "2",
-    name: "SANG Oficina",
-    contributionAmount: 2500,
-    frequency: "biweekly",
-    numberOfParticipants: 8,
-    startDate: new Date("2024-02-01"),
-    turnAssignment: "manual",
-    organizerId: "2",
-    status: "active",
-    inviteCode: "XYZ789",
-    createdAt: new Date(),
-    currentTurn: 5,
-  },
-  {
-    id: "3",
-    name: "SANG Vecinos",
-    contributionAmount: 3000,
-    frequency: "monthly",
-    numberOfParticipants: 12,
-    startDate: new Date("2023-06-01"),
-    turnAssignment: "random",
-    organizerId: "3",
-    status: "completed",
-    inviteCode: "VEC456",
-    createdAt: new Date(),
-    currentTurn: 12,
-  },
-  {
-    id: "4",
-    name: "SANG Amigos",
-    contributionAmount: 10000,
-    frequency: "monthly",
-    numberOfParticipants: 6,
-    startDate: new Date("2024-03-01"),
-    turnAssignment: "random",
-    organizerId: "1",
-    status: "pending",
-    inviteCode: "AMG321",
-    createdAt: new Date(),
-    currentTurn: 0,
-  },
-];
-
-const mockUser = {
-  fullName: "Juan Pérez",
-  role: "user" as const,
-};
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase";
+import { collection, query, where, getDocs, collectionGroup, getDoc } from "firebase/firestore";
 
 const statusFilters: { value: SANGStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos" },
@@ -81,8 +19,82 @@ const statusFilters: { value: SANGStatus | "all"; label: string }[] = [
 
 export default function SANGList() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [filter, setFilter] = useState<SANGStatus | "all">("all");
-  const [sangs] = useState<SANG[]>(mockSangs);
+  const [sangs, setSangs] = useState<SANG[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSangs = async () => {
+      if (!currentUser) return;
+      setLoading(true);
+
+      try {
+        const fetchedSangs: any[] = [];
+        const processedSangIds = new Set();
+
+        // 1. Organizer SANGs
+        const qOrganizer = query(
+          collection(db, "sangs"),
+          where("organizerId", "==", currentUser.uid)
+        );
+        const organizerSnapshot = await getDocs(qOrganizer);
+        organizerSnapshot.docs.forEach(doc => {
+          if (!processedSangIds.has(doc.id)) {
+            fetchedSangs.push({ id: doc.id, ...doc.data() });
+            processedSangIds.add(doc.id);
+          }
+        });
+
+        // 2. Member SANGs
+        const membershipsQ = query(collectionGroup(db, 'members'), where('userId', '==', currentUser.uid));
+        const membershipSnap = await getDocs(membershipsQ);
+
+        const membershipPromises = membershipSnap.docs.map(async (memDoc) => {
+          const data = memDoc.data();
+          const sangDocRef = memDoc.ref.parent.parent;
+
+          // Only include if active or legacy (not pending requests, typically)
+          // But user might want to see pending SANGs they are waiting on? 
+          // Let's filter out 'pending' status requests if we want only "My SANGs"
+          // Actually, if I joined and am pending, should I see it? Maybe. 
+          // For now, let's include 'active' SANGs mainly.
+          if (sangDocRef && (data.status === 'active' || !data.status)) {
+            if (!processedSangIds.has(sangDocRef.id)) {
+              const sangSnap = await getDoc(sangDocRef);
+              if (sangSnap.exists()) {
+                processedSangIds.add(sangSnap.id);
+                return { id: sangSnap.id, ...sangSnap.data() };
+              }
+            }
+          }
+          return null;
+        });
+
+        const results = await Promise.all(membershipPromises);
+        results.forEach(res => { if (res) fetchedSangs.push(res); });
+
+        // Normalize Dates
+        const finalSangs = fetchedSangs.map(s => ({
+          ...s,
+          startDate: s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate || Date.now()),
+          createdAt: s.createdAt?.toDate ? s.createdAt.toDate() : new Date()
+        })) as SANG[];
+
+        // Sort by Created At Desc
+        finalSangs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        setSangs(finalSangs);
+
+      } catch (error) {
+        console.error("Error fetching SANG list:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSangs();
+  }, [currentUser]);
 
   const filteredSangs = sangs.filter((sang) => {
     if (filter === "all") return true;
@@ -91,14 +103,16 @@ export default function SANGList() {
 
   return (
     <div className="min-h-screen bg-muted/30 pb-20 md:pb-8">
-      <Header user={mockUser} />
+      <Header />
 
       <main className="container py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 animate-fade-in">
           <div>
             <h1 className="text-2xl font-bold">Mis SANGs</h1>
-            <p className="text-muted-foreground">{sangs.length} grupos en total</p>
+            <p className="text-muted-foreground">
+              {loading ? "Cargando..." : `${sangs.length} grupos en total`}
+            </p>
           </div>
           <Button variant="hero" onClick={() => navigate("/create-sang")}>
             <Plus className="h-5 w-5 mr-2" />
@@ -123,7 +137,12 @@ export default function SANGList() {
 
         {/* SANG List */}
         <div className="space-y-4 animate-slide-up" style={{ animationDelay: "100ms" }}>
-          {filteredSangs.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary mb-2" />
+              <p className="text-muted-foreground">Buscando tus grupos...</p>
+            </div>
+          ) : filteredSangs.length === 0 ? (
             <div className="text-center py-12">
               <div className="h-20 w-20 rounded-2xl bg-accent flex items-center justify-center mx-auto mb-4">
                 <Filter className="h-10 w-10 text-muted-foreground" />
@@ -138,7 +157,7 @@ export default function SANGList() {
             </div>
           ) : (
             filteredSangs.map((sang) => (
-              <SANGCard key={sang.id} sang={sang} userTurn={3} />
+              <SANGCard key={sang.id} sang={sang} userTurn={0} memberCount={sang.numberOfParticipants} />
             ))
           )}
         </div>
