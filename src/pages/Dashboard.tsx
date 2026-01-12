@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Plus, 
-  Users, 
-  Calendar, 
+import {
+  Plus,
+  Users,
+  Calendar,
   DollarSign,
   ArrowRight,
   Bell,
   TrendingUp
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { auth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { DashboardCard } from "@/components/DashboardCard";
@@ -61,16 +64,34 @@ const mockSangs: SANG[] = [
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [user] = useState<User>(mockUser);
+  const { userProfile, loading } = useAuth();
   const [sangs] = useState<SANG[]>(mockSangs);
 
-  const handleLogout = () => {
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Cargando...</div>;
+  }
+
+  // Fallback if userProfile is not yet loaded but auth is valid (should be covered by loading state, but safe guard)
+  const displayName = userProfile?.fullName || "Usuario";
+  const displayScore = userProfile?.reputationScore || 0;
 
   return (
     <div className="min-h-screen bg-muted/30 pb-20 md:pb-8">
-      <Header user={user} onLogout={handleLogout} />
+      {/* Passing a partial user object or adapting the Header component might be needed if Header checks specific User fields. 
+          Assuming Header accepts a subset or we construct a compatible object.
+          For now, let's assume Header takes { fullName, reputationScore } or similar.
+          If Header expects the full User type, we construct it.
+      */}
+      <Header user={userProfile as User} onLogout={handleLogout} />
 
       <main className="container py-6 space-y-6">
         {/* Welcome Section */}
@@ -78,13 +99,13 @@ export default function Dashboard() {
           <div className="flex items-start justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold">
-                ¡Hola, {user.fullName.split(" ")[0]}! 👋
+                ¡Hola, {displayName.split(" ")[0]}! 👋
               </h1>
               <p className="text-muted-foreground">
                 Bienvenido de vuelta a SANG RD
               </p>
             </div>
-            <ReputationBadge score={user.reputationScore} />
+            <ReputationBadge score={displayScore} />
           </div>
         </section>
 

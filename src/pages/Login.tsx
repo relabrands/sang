@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,15 +22,27 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login - will be replaced with actual auth
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await signInWithEmailAndPassword(auth, form.email, form.password);
       toast({
         title: "¡Bienvenido!",
         description: "Has iniciado sesión correctamente.",
       });
       navigate("/dashboard");
-    }, 1000);
+    } catch (error: any) {
+      console.error("Error logging in:", error);
+      let errorMessage = "Error al iniciar sesión.";
+      if (error.code === "auth/invalid-credential" || error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+        errorMessage = "Correo electrónico o contraseña incorrectos.";
+      }
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

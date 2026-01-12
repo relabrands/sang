@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,15 +25,48 @@ export default function Register() {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate registration - will be replaced with actual auth
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // 1. Create Authentication User
+      const { user } = await createUserWithEmailAndPassword(
+        auth,
+        form.email,
+        form.password
+      );
+
+      // 2. Create Firestore User Document
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        fullName: form.fullName,
+        email: form.email,
+        phoneNumber: form.phoneNumber,
+        role: "user",
+        reputationScore: 100,
+        createdAt: serverTimestamp(),
+      });
+
       toast({
         title: "¡Cuenta creada!",
         description: "Tu cuenta ha sido creada exitosamente.",
       });
       navigate("/dashboard");
-    }, 1000);
+    } catch (error: any) {
+      console.error("Error creating account:", error);
+
+      let errorMessage = "Hubo un error al crear tu cuenta.";
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "Este correo electrónico ya está registrado.";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "La contraseña debe tener al menos 6 caracteres.";
+      }
+
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

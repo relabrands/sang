@@ -3,9 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import type { SANG } from "@/types";
-import { db } from "@/lib/firebase";
-
-console.log("Firebase Project ID:", db.app.options.projectId);
 
 
 interface SANGCardProps {
