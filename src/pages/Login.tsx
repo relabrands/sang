@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getDoc, doc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,8 @@ export default function Login() {
 
     try {
       const { user } = await signInWithEmailAndPassword(auth, form.email, form.password);
+
+      // Check roles for redirection
       const userDoc = await getDoc(doc(db, "users", user.uid));
       const adminDoc = await getDoc(doc(db, "admins", user.uid));
 
