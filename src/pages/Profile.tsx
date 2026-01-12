@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  ArrowLeft, 
-  User, 
-  Mail, 
-  Phone, 
-  Calendar, 
-  TrendingUp, 
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  TrendingUp,
   TrendingDown,
   ChevronRight,
   LogOut,
@@ -20,23 +20,13 @@ import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { ReputationBadge } from "@/components/ReputationBadge";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { auth } from "@/lib/firebase";
 
-// Mock data
-const mockUser = {
-  id: "1",
-  email: "juan@example.com",
-  fullName: "Juan Pérez",
-  phoneNumber: "809-555-1234",
-  role: "user" as const,
-  reputationScore: 95,
-  createdAt: new Date("2023-06-15"),
-};
-
+// Mock Reputation History (can be replaced later with real subcollection fetch)
 const mockReputationHistory = [
   { id: "1", change: 10, reason: "SANG completado", date: new Date("2024-01-10"), sangName: "SANG Familia García" },
   { id: "2", change: -5, reason: "Pago tardío", date: new Date("2023-12-20"), sangName: "SANG Oficina" },
-  { id: "3", change: 10, reason: "SANG completado", date: new Date("2023-11-15"), sangName: "SANG Amigos" },
-  { id: "4", change: -5, reason: "Pago tardío", date: new Date("2023-10-05"), sangName: "SANG Familia García" },
 ];
 
 const menuItems = [
@@ -47,7 +37,7 @@ const menuItems = [
 
 export default function Profile() {
   const navigate = useNavigate();
-  const [user] = useState(mockUser);
+  const { userProfile, loading } = useAuth();
 
   const getInitials = (name: string) => {
     return name
@@ -57,13 +47,47 @@ export default function Profile() {
       .toUpperCase();
   };
 
-  const handleLogout = () => {
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      navigate("/");
+    } catch (error) {
+      console.error("Error signing out", error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent mb-4" />
+        <p className="text-muted-foreground">Cargando perfil...</p>
+      </div>
+    );
+  }
+
+  if (!userProfile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-lg font-medium">No se encontró información del usuario.</p>
+          <Button variant="link" onClick={() => navigate("/")}>Volver al inicio</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Safe user data object
+  const user = {
+    fullName: userProfile.fullName || "Usuario",
+    email: userProfile.email || "",
+    phoneNumber: "No registrado", // Placeholder
+    reputationScore: userProfile.reputationScore || 100,
+    createdAt: userProfile.createdAt && userProfile.createdAt.toDate ? userProfile.createdAt.toDate() : new Date(),
   };
 
   return (
     <div className="min-h-screen bg-muted/30 pb-20 md:pb-8">
-      <Header user={user} onLogout={handleLogout} />
+      <Header user={userProfile as any} onLogout={handleLogout} />
 
       <main className="container py-6 max-w-lg mx-auto">
         {/* Profile Header */}
@@ -83,15 +107,15 @@ export default function Profile() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6 animate-slide-up">
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-primary">5</p>
+            <p className="text-2xl font-bold text-primary">0</p>
             <p className="text-xs text-muted-foreground">SANGs Completados</p>
           </div>
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-primary">2</p>
+            <p className="text-2xl font-bold text-primary">0</p>
             <p className="text-xs text-muted-foreground">SANGs Activos</p>
           </div>
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-success">98%</p>
+            <p className="text-2xl font-bold text-success">100%</p>
             <p className="text-xs text-muted-foreground">Pagos a Tiempo</p>
           </div>
         </div>

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Users, 
-  TrendingUp, 
-  AlertTriangle, 
+import {
+  Users,
+  TrendingUp,
+  AlertTriangle,
   DollarSign,
   Activity,
   BarChart3,
@@ -17,57 +17,82 @@ import { ReputationBadge } from "@/components/ReputationBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
-
-// Mock admin data
-const mockStats = {
-  totalUsers: 1247,
-  activeSangs: 89,
-  completedSangs: 234,
-  monthlyVolume: 4500000,
-  latePaymentRatio: 8.3,
-  averageReputation: 87,
-};
-
-const mockRecentUsers = [
-  { id: "1", name: "María García", reputation: 95, sangs: 3, status: "active" },
-  { id: "2", name: "Carlos López", reputation: 72, sangs: 2, status: "flagged" },
-  { id: "3", name: "Ana Martínez", reputation: 100, sangs: 5, status: "active" },
-  { id: "4", name: "Pedro Santos", reputation: 45, sangs: 1, status: "suspended" },
-];
-
-const mockRecentSangs = [
-  { id: "1", name: "SANG Villa Mella", members: 12, status: "active" as const, monthlyAmount: 60000 },
-  { id: "2", name: "SANG Naco Business", members: 8, status: "active" as const, monthlyAmount: 80000 },
-  { id: "3", name: "SANG Los Prados", members: 10, status: "pending" as const, monthlyAmount: 50000 },
-];
-
-const mockPaymentIssues = [
-  { id: "1", userName: "Roberto Díaz", sangName: "SANG Villa Mella", daysLate: 5, amount: 5000 },
-  { id: "2", userName: "Lucía Fernández", sangName: "SANG Naco Business", daysLate: 3, amount: 10000 },
-  { id: "3", userName: "Miguel Herrera", sangName: "SANG Los Prados", daysLate: 8, amount: 5000 },
-];
-
-const mockAdminUser = {
-  fullName: "Admin Principal",
-  role: "admin" as const,
-};
+import { useAuth } from "@/contexts/AuthContext";
+import { auth, db } from "@/lib/firebase";
+import { collection, query, orderBy, limit, getDocs, where, getCountFromServer } from "firebase/firestore";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { userProfile, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "sangs" | "payments">("overview");
 
+  // Real Data State
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    activeSangs: 0,
+    completedSangs: 0,
+    monthlyVolume: 0,
+    latePaymentRatio: 0,
+    averageReputation: 100,
+  });
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [recentSangs, setRecentSangs] = useState<any[]>([]);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // 1. Counts
+        const usersColl = collection(db, "users");
+        const sangsColl = collection(db, "sangs");
+
+        const usersSnapshot = await getCountFromServer(usersColl);
+        const activeSangsSnapshot = await getCountFromServer(query(sangsColl, where("status", "==", "active")));
+
+        setStats(prev => ({
+          ...prev,
+          totalUsers: usersSnapshot.data().count,
+          activeSangs: activeSangsSnapshot.data().count
+        }));
+
+        // 2. Recent Users
+        const recentUsersQuery = query(usersColl, orderBy("createdAt", "desc"), limit(5));
+        const recentUsersSnap = await getDocs(recentUsersQuery);
+        const users = recentUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setRecentUsers(users);
+
+        // 3. Recent SANGs
+        const recentSangsQuery = query(sangsColl, orderBy("createdAt", "desc"), limit(5));
+        const recentSangsSnap = await getDocs(recentSangsQuery);
+        const sangs = recentSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setRecentSangs(sangs);
+
+      } catch (error) {
+        console.error("Error fetching admin data:", error);
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   const getInitials = (name: string) => {
-    return name.split(" ").map((n) => n[0]).join("").toUpperCase();
+    return name ? name.split(" ").map((n) => n[0]).join("").toUpperCase() : "U";
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await auth.signOut();
     navigate("/");
   };
 
+  if (authLoading || loadingConfig) {
+    return <div className="min-h-screen flex items-center justify-center">Cargando panel de administración...</div>;
+  }
+
   return (
     <div className="min-h-screen bg-muted/30 pb-8">
-      <Header user={mockAdminUser} onLogout={handleLogout} />
+      <Header user={userProfile as any} onLogout={handleLogout} />
 
       <main className="container py-6">
         {/* Header */}
@@ -107,36 +132,34 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <DashboardCard
                 title="Usuarios Totales"
-                value={mockStats.totalUsers.toLocaleString()}
+                value={stats.totalUsers.toLocaleString()}
                 icon={Users}
-                trend={{ value: 12, isPositive: true }}
               />
               <DashboardCard
                 title="SANGs Activos"
-                value={mockStats.activeSangs}
+                value={stats.activeSangs.toString()}
                 icon={Activity}
-                trend={{ value: 8, isPositive: true }}
               />
               <DashboardCard
                 title="SANGs Completados"
-                value={mockStats.completedSangs}
+                value={stats.completedSangs.toString()}
                 icon={UserCheck}
               />
               <DashboardCard
                 title="Volumen Mensual"
-                value={`RD$ ${(mockStats.monthlyVolume / 1000000).toFixed(1)}M`}
+                value={`RD$ ${(stats.monthlyVolume / 1000000).toFixed(1)}M`}
                 icon={DollarSign}
                 variant="primary"
               />
               <DashboardCard
                 title="Pagos Tardíos"
-                value={`${mockStats.latePaymentRatio}%`}
+                value={`${stats.latePaymentRatio}%`}
                 icon={AlertTriangle}
                 variant="warning"
               />
               <DashboardCard
                 title="Reputación Promedio"
-                value={mockStats.averageReputation}
+                value={stats.averageReputation}
                 icon={BarChart3}
               />
             </div>
@@ -153,180 +176,70 @@ export default function AdminDashboard() {
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  {mockRecentUsers.map((user) => (
+                  {recentUsers.map((user) => (
                     <div key={user.id} className="flex items-center gap-3 py-2">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback className="bg-accent text-accent-foreground text-sm">
-                          {getInitials(user.name)}
+                          {getInitials(user.fullName)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <p className="font-medium text-sm">{user.name}</p>
-                        <p className="text-xs text-muted-foreground">{user.sangs} SANGs</p>
+                        <p className="font-medium text-sm">{user.fullName}</p>
+                        <p className="text-xs text-muted-foreground">{user.email}</p>
                       </div>
-                      <ReputationBadge score={user.reputation} size="sm" showTooltip={false} />
+                      <ReputationBadge score={user.reputationScore || 100} size="sm" showTooltip={false} />
                     </div>
                   ))}
+                  {recentUsers.length === 0 && <p className="text-sm text-muted-foreground">No hay usuarios recientes.</p>}
                 </div>
               </div>
 
-              {/* Payment Issues */}
+              {/* SANGs List */}
               <div className="bg-card rounded-2xl p-5 shadow-card">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold">Pagos Problemáticos</h2>
-                  <Button variant="ghost" size="sm" onClick={() => setActiveTab("payments")}>
+                  <h2 className="font-semibold">SANGs Recientes</h2>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveTab("sangs")}>
                     Ver todos
                     <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  {mockPaymentIssues.map((issue) => (
-                    <div key={issue.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
-                      <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center">
-                        <AlertTriangle className="h-5 w-5 text-destructive" />
-                      </div>
+                  {recentSangs.map((sang) => (
+                    <div key={sang.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
                       <div className="flex-1">
-                        <p className="font-medium text-sm">{issue.userName}</p>
-                        <p className="text-xs text-muted-foreground">{issue.sangName}</p>
+                        <p className="font-medium text-sm">{sang.name}</p>
+                        <div className="flex gap-2">
+                          <StatusBadge status={sang.status} />
+                          <span className="text-xs text-muted-foreground mt-1">
+                            {sang.numberOfParticipants} miembros
+                          </span>
+                        </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold text-sm text-destructive">{issue.daysLate} días</p>
-                        <p className="text-xs text-muted-foreground">RD$ {issue.amount.toLocaleString()}</p>
+                        <p className="font-medium text-sm">RD$ {sang.contributionAmount}</p>
+                        <p className="text-xs text-muted-foreground">{sang.frequency}</p>
                       </div>
                     </div>
                   ))}
+                  {recentSangs.length === 0 && <p className="text-sm text-muted-foreground">No hay SANGs recientes.</p>}
                 </div>
-              </div>
-            </div>
-
-            {/* Recent SANGs */}
-            <div className="bg-card rounded-2xl p-5 shadow-card">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold">SANGs Recientes</h2>
-                <Button variant="ghost" size="sm" onClick={() => setActiveTab("sangs")}>
-                  Ver todos
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-left text-sm text-muted-foreground border-b border-border">
-                      <th className="pb-3 font-medium">Nombre</th>
-                      <th className="pb-3 font-medium">Miembros</th>
-                      <th className="pb-3 font-medium">Estado</th>
-                      <th className="pb-3 font-medium text-right">Volumen/Mes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockRecentSangs.map((sang) => (
-                      <tr key={sang.id} className="border-b border-border last:border-0">
-                        <td className="py-3 font-medium">{sang.name}</td>
-                        <td className="py-3 text-muted-foreground">{sang.members}</td>
-                        <td className="py-3">
-                          <StatusBadge status={sang.status} />
-                        </td>
-                        <td className="py-3 text-right font-medium">
-                          RD$ {sang.monthlyAmount.toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
           </div>
         )}
 
-        {/* Users Tab */}
+        {/* Users Tab Placeholder */}
         {activeTab === "users" && (
-          <div className="bg-card rounded-2xl p-5 shadow-card animate-slide-up">
-            <h2 className="font-semibold mb-4">Todos los Usuarios</h2>
-            <div className="space-y-3">
-              {mockRecentUsers.map((user) => (
-                <div key={user.id} className="flex items-center gap-4 p-4 bg-muted/50 rounded-xl">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-accent text-accent-foreground">
-                      {getInitials(user.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <p className="font-medium">{user.name}</p>
-                    <p className="text-sm text-muted-foreground">{user.sangs} SANGs activos</p>
-                  </div>
-                  <ReputationBadge score={user.reputation} showTooltip={false} />
-                  <Button variant="outline" size="sm">
-                    Ver perfil
-                  </Button>
-                </div>
-              ))}
-            </div>
+          <div className="text-center py-10">
+            <p>Lista completa de usuarios (Implementación futura)</p>
+            <Button variant="link" onClick={() => setActiveTab("overview")}>Volver</Button>
           </div>
         )}
-
-        {/* SANGs Tab */}
+        {/* SANGs Tab Placeholder */}
         {activeTab === "sangs" && (
-          <div className="bg-card rounded-2xl p-5 shadow-card animate-slide-up">
-            <h2 className="font-semibold mb-4">Todos los SANGs</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left text-sm text-muted-foreground border-b border-border">
-                    <th className="pb-3 font-medium">Nombre</th>
-                    <th className="pb-3 font-medium">Miembros</th>
-                    <th className="pb-3 font-medium">Estado</th>
-                    <th className="pb-3 font-medium text-right">Volumen/Mes</th>
-                    <th className="pb-3 font-medium text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mockRecentSangs.map((sang) => (
-                    <tr key={sang.id} className="border-b border-border last:border-0">
-                      <td className="py-4 font-medium">{sang.name}</td>
-                      <td className="py-4 text-muted-foreground">{sang.members}</td>
-                      <td className="py-4">
-                        <StatusBadge status={sang.status} />
-                      </td>
-                      <td className="py-4 text-right font-medium">
-                        RD$ {sang.monthlyAmount.toLocaleString()}
-                      </td>
-                      <td className="py-4 text-right">
-                        <Button variant="outline" size="sm">
-                          Ver detalles
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Payments Tab */}
-        {activeTab === "payments" && (
-          <div className="bg-card rounded-2xl p-5 shadow-card animate-slide-up">
-            <h2 className="font-semibold mb-4">Pagos Problemáticos</h2>
-            <div className="space-y-3">
-              {mockPaymentIssues.map((issue) => (
-                <div key={issue.id} className="flex items-center gap-4 p-4 bg-destructive/5 rounded-xl border border-destructive/20">
-                  <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center">
-                    <AlertTriangle className="h-6 w-6 text-destructive" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{issue.userName}</p>
-                    <p className="text-sm text-muted-foreground">{issue.sangName}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-destructive">{issue.daysLate} días de retraso</p>
-                    <p className="text-sm text-muted-foreground">RD$ {issue.amount.toLocaleString()}</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Contactar
-                  </Button>
-                </div>
-              ))}
-            </div>
+          <div className="text-center py-10">
+            <p>Lista completa de SANGs (Implementación futura)</p>
+            <Button variant="link" onClick={() => setActiveTab("overview")}>Volver</Button>
           </div>
         )}
       </main>
