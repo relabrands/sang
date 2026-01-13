@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, doc, setDoc, serverTimestamp, collectionGroup, onSnapshot, getDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
@@ -39,8 +39,9 @@ export default function Profile() {
   const { toast } = useToast();
   const { userProfile, loading, currentUser } = useAuth();
 
-  // Activity History State
+  // Activity & Stats State
   const [activityHistory, setActivityHistory] = useState<any[]>([]);
+  const [stats, setStats] = useState({ organized: 0, participated: 0, timelyPaymentRate: 100 });
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Edit Mode State
@@ -94,32 +95,68 @@ export default function Profile() {
     }
   }, [userProfile, currentUser]);
 
-  // Fetch real activity history
+  // Fetch Real-time Activity & Stats
   useEffect(() => {
-    const fetchHistory = async () => {
-      // Use currentUser.uid if userProfile is missing (e.g. first login before doc creation)
-      const uid = userProfile?.uid || currentUser?.uid;
-      if (!uid) return;
+    const uid = userProfile?.uid || currentUser?.uid;
+    if (!uid) return;
 
-      setLoadingHistory(true);
-      try {
-        // Note: This query requires a composite index: organizerId ASC, createdAt DESC
-        // If index is missing, it will fail. Ensure firestore.indexes.json is deployed.
-        const q = query(
-          collection(db, "sangs"),
-          where("organizerId", "==", uid),
-          orderBy("createdAt", "desc")
-        );
-        const snapshot = await getDocs(q);
-        const sangs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setActivityHistory(sangs);
-      } catch (error) {
-        console.error("Error fetching profile history:", error);
-      } finally {
-        setLoadingHistory(false);
-      }
-    };
-    fetchHistory();
+    setLoadingHistory(true);
+
+    // Query all SANG memberships (Participations)
+    const q = query(
+      collectionGroup(db, "members"),
+      where("userId", "==", uid)
+    );
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const memberships = snapshot.docs.map(d => d.data());
+
+      // 1. Calculate Basic Stats
+      const total = memberships.length;
+      const organized = memberships.filter((m: any) => m.role === 'organizer').length;
+
+      // Calculate Payment Rate based on reputation (if available) or assume 100 for now
+      // TODO: Real payment history calculation
+      const rate = userProfile?.reputationScore ? Math.min(100, userProfile.reputationScore) : 100;
+
+      setStats({ organized, participated: total, timelyPaymentRate: rate });
+
+      // 2. Fetch SANG Details for History (Name, Amounts)
+      const activityPromises = memberships.map(async (m: any) => {
+        try {
+          // Ensure we have a sangId
+          if (!m.sangId) return m;
+
+          const sangDoc = await getDoc(doc(db, "sangs", m.sangId));
+          if (sangDoc.exists()) {
+            const sData = sangDoc.data();
+            return {
+              ...m,
+              sangName: sData.name,
+              contributionAmount: sData.contributionAmount,
+              // Use joinedAt from member, fallback to SANG creation
+              activityDate: m.joinedAt || sData.createdAt,
+              type: m.role === 'organizer' ? 'Organizó' : 'Se unió a'
+            };
+          }
+        } catch (e) { console.error(e); }
+        return { ...m, sangName: 'SANG Desconocido', type: 'Participación' };
+      });
+
+      const detailedActivity = await Promise.all(activityPromises);
+
+      // Sort by date descending
+      detailedActivity.sort((a, b) => {
+        const dateA = a.activityDate?.seconds || 0;
+        const dateB = b.activityDate?.seconds || 0;
+        return dateB - dateA;
+      });
+
+      setActivityHistory(detailedActivity);
+      setLoadingHistory(false);
+    });
+
+    return () => unsubscribe();
   }, [userProfile, currentUser]);
 
   const handleSaveProfile = async () => {
@@ -252,15 +289,15 @@ export default function Profile() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6 animate-slide-up">
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-primary">{activityHistory.length}</p>
+            <p className="text-2xl font-bold text-primary">{stats.organized}</p>
             <p className="text-xs text-muted-foreground">SANGs Organizados</p>
           </div>
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-primary">0</p>
+            <p className="text-2xl font-bold text-primary">{stats.participated}</p>
             <p className="text-xs text-muted-foreground">Participaciones</p>
           </div>
           <div className="bg-card rounded-xl p-4 text-center shadow-card">
-            <p className="text-2xl font-bold text-success">100%</p>
+            <p className="text-2xl font-bold text-success">{stats.timelyPaymentRate}%</p>
             <p className="text-xs text-muted-foreground">Pagos a Tiempo</p>
           </div>
         </div>
@@ -434,30 +471,30 @@ export default function Profile() {
 
         {/* Activity History */}
         <div className="bg-card rounded-2xl p-5 shadow-card mb-6 animate-slide-up" style={{ animationDelay: "150ms" }}>
-          <h2 className="font-semibold mb-4">Actividad Reciente (Organizador)</h2>
+          <h2 className="font-semibold mb-4">Actividad Reciente</h2>
           <div className="space-y-3">
-            {activityHistory.map((activity) => (
-              <div key={activity.id} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
+            {activityHistory.map((activity, idx) => (
+              <div key={idx} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
                 <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-primary/10">
                   <TrendingUp className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-sm">Creación de SANG</p>
-                  <p className="text-xs text-muted-foreground">{activity.name}</p>
+                  <p className="font-medium text-sm">{activity.type || 'Actividad'}</p>
+                  <p className="text-xs text-muted-foreground">{activity.sangName || 'SANG'}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-primary">
                     RD$ {activity.contributionAmount?.toLocaleString()}
                   </p>
                   <p className="text-2xs text-muted-foreground">
-                    {activity.createdAt?.toDate ? activity.createdAt.toDate().toLocaleDateString("es-DO") : "Fecha desc."}
+                    {activity.activityDate?.toDate ? activity.activityDate.toDate().toLocaleDateString("es-DO") : "Fecha desc."}
                   </p>
                 </div>
               </div>
             ))}
             {activityHistory.length === 0 && !loadingHistory && (
               <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground">Aún no has organizado SANGs.</p>
+                <p className="text-sm text-muted-foreground">Sin actividad reciente.</p>
               </div>
             )}
             {loadingHistory && <p className="text-center text-sm">Cargando actividad...</p>}
