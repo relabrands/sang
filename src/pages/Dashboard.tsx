@@ -31,23 +31,27 @@ export default function Dashboard() {
     const fetchSangs = async () => {
       if (!currentUser) return;
 
-      try {
-        const fetchedSangs: any[] = [];
-        const pending: any[] = [];
-        const processedSangIds = new Set();
+      const fetchedSangs: any[] = [];
+      const pending: any[] = [];
+      const processedSangIds = new Set();
 
+      try {
         // 1. Organizer SANGs
-        const qOrganizer = query(
-          collection(db, "sangs"),
-          where("organizerId", "==", currentUser.uid)
-        );
-        const organizerSnapshot = await getDocs(qOrganizer);
-        organizerSnapshot.docs.forEach(doc => {
-          if (!processedSangIds.has(doc.id)) {
-            fetchedSangs.push({ id: doc.id, ...doc.data() });
-            processedSangIds.add(doc.id);
-          }
-        });
+        try {
+          const qOrganizer = query(
+            collection(db, "sangs"),
+            where("organizerId", "==", currentUser.uid)
+          );
+          const organizerSnapshot = await getDocs(qOrganizer);
+          organizerSnapshot.docs.forEach(doc => {
+            if (!processedSangIds.has(doc.id)) {
+              fetchedSangs.push({ id: doc.id, ...doc.data() });
+              processedSangIds.add(doc.id);
+            }
+          });
+        } catch (e) {
+          console.error("Error fetching organizer SANGs:", e);
+        }
 
         // 2. Member SANGs (Requests & Active)
         try {
@@ -60,24 +64,28 @@ export default function Dashboard() {
             if (!sangDocRef) return;
 
             if (data.status === 'pending') {
-              // Pending Request
-              const sangSnap = await getDoc(sangDocRef);
-              if (sangSnap.exists()) {
-                pending.push({
-                  requestId: memDoc.id,
-                  sangId: sangSnap.id,
-                  sangName: sangSnap.data().name,
-                  ...data
-                });
-              }
+              // Pending Request - Fetch details
+              try {
+                const sangSnap = await getDoc(sangDocRef);
+                if (sangSnap.exists()) {
+                  pending.push({
+                    requestId: memDoc.id,
+                    sangId: sangSnap.id,
+                    sangName: sangSnap.data().name,
+                    ...data
+                  });
+                }
+              } catch (e) { console.error("Error fetching pending sang details", e); }
             } else if (data.status === 'active' || !data.status) {
               // Active Member
               if (!processedSangIds.has(sangDocRef.id)) {
-                const sangSnap = await getDoc(sangDocRef);
-                if (sangSnap.exists()) {
-                  processedSangIds.add(sangSnap.id);
-                  fetchedSangs.push({ id: sangSnap.id, ...sangSnap.data() });
-                }
+                try {
+                  const sangSnap = await getDoc(sangDocRef);
+                  if (sangSnap.exists()) {
+                    processedSangIds.add(sangSnap.id);
+                    fetchedSangs.push({ id: sangSnap.id, ...sangSnap.data() });
+                  }
+                } catch (e) { console.error("Error fetching active sang details", e); }
               }
             }
           });
@@ -93,6 +101,9 @@ export default function Dashboard() {
           startDate: s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate || Date.now()),
           createdAt: s.createdAt?.toDate ? s.createdAt.toDate() : new Date(),
         })) as SANG[];
+
+        // Sort
+        finalSangs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
         setSangs(finalSangs);
         setPendingRequests(pending);
