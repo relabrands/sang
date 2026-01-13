@@ -31,6 +31,19 @@ export default function JoinSANG() {
     }
   }, []);
 
+  // Check Bank Info
+  useEffect(() => {
+    if (userProfile && (!userProfile.bankName || !userProfile.accountNumber || !userProfile.cedula)) {
+      toast({
+        title: "Perfil Incompleto",
+        description: "Para unirte a un SANG, debes configurar tu cuenta bancaria.",
+        variant: "destructive",
+        duration: 5000
+      });
+      navigate("/profile");
+    }
+  }, [userProfile, navigate, toast]);
+
   const handleSearch = async (codeToUse?: string) => {
     const code = codeToUse || inviteCode;
     if (code.length < 6) return;

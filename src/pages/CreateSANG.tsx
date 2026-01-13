@@ -52,6 +52,20 @@ export default function CreateSANG() {
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
+  // PROACTIVE CHECK: Enforce Bank Info
+  useEffect(() => {
+    // Wait for profile to load
+    if (userProfile && (!userProfile.bankName || !userProfile.accountNumber || !userProfile.cedula)) {
+      toast({
+        title: "Perfil Incompleto",
+        description: "Para crear un SANG, primero debes configurar tu información bancaria.",
+        variant: "destructive",
+        duration: 5000
+      });
+      navigate("/profile");
+    }
+  }, [userProfile, navigate, toast]);
+
   const isStepValid = () => {
     switch (step) {
       case 1:
