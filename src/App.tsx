@@ -13,6 +13,9 @@ import JoinSANG from "./pages/JoinSANG";
 import SANGDetail from "./pages/SANGDetail";
 import SANGList from "./pages/SANGList";
 import Profile from "./pages/Profile";
+import Notifications from "./pages/Notifications";
+import Security from "./pages/Security";
+import Help from "./pages/Help";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
@@ -73,6 +76,30 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Profile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/security"
+              element={
+                <ProtectedRoute>
+                  <Security />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/help"
+              element={
+                <ProtectedRoute>
+                  <Help />
                 </ProtectedRoute>
               }
             />
