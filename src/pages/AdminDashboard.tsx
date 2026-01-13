@@ -47,73 +47,86 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      let fetchedUsers: any[] = [];
+      let fetchedSangs: any[] = [];
+
+      // 1. Critical Data: Users & SANGs
       try {
         const usersColl = collection(db, "users");
         const sangsColl = collection(db, "sangs");
 
-        // 1. Fetch Data
+        // Users
         const allUsersQuery = query(usersColl, orderBy("createdAt", "desc"));
         const allUsersSnap = await getDocs(allUsersQuery);
-        const users = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const usersMap = new Map(users.map(u => [u.id, u]));
+        fetchedUsers = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+        // SANGs
         const allSangsQuery = query(sangsColl, orderBy("createdAt", "desc"));
         const allSangsSnap = await getDocs(allSangsQuery);
-        const sangs = allSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const sangsMap = new Map(sangs.map(s => [s.id, s]));
+        fetchedSangs = allSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // 2. Fetch Payments (Global)
-        const paymentsQuery = query(
-          collectionGroup(db, 'members'),
-          where('paymentStatus', 'in', ['paid', 'reviewing'])
-        );
-        const paymentsSnap = await getDocs(paymentsQuery);
+        setAllUsers(fetchedUsers);
+        setAllSangs(fetchedSangs);
+        setRecentUsers(fetchedUsers.slice(0, 5));
+        setRecentSangs(fetchedSangs.slice(0, 5));
 
-        const payments = paymentsSnap.docs.map(doc => {
-          const data = doc.data();
-          const sang = sangsMap.get(data.sangId);
-          const user = usersMap.get(data.userId);
-
-          return {
-            id: doc.id,
-            ...data,
-            sangName: sang?.name || "Desconocido",
-            amount: sang?.contributionAmount || 0,
-            userName: user?.fullName || data.name || "Usuario",
-            date: data.lastPaymentDate?.toDate ? data.lastPaymentDate.toDate() : new Date(),
-            paymentStatus: data.paymentStatus
-          };
-        });
-
-        // Current Month Volume
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-        const currentMonthPayments = payments.filter(p =>
-          p.paymentStatus === 'paid' && p.date >= startOfMonth
-        );
-
-        const totalVolume = currentMonthPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-        setStats({
-          totalUsers: users.length,
-          activeSangs: sangs.filter(s => s.status === "active").length,
-          completedSangs: sangs.filter(s => s.status === "completed").length,
-          monthlyVolume: totalVolume,
-          latePaymentRatio: 0,
-          averageReputation: 100,
-        });
-
-        setAllUsers(users);
-        setAllSangs(sangs);
-        setRecentUsers(users.slice(0, 5));
-        setRecentSangs(sangs.slice(0, 5));
-
-        payments.sort((a, b) => b.date.getTime() - a.date.getTime());
-        setAllPayments(payments);
+        // Initial Stats (defaults)
+        setStats(prev => ({
+          ...prev,
+          totalUsers: fetchedUsers.length,
+          activeSangs: fetchedSangs.filter(s => s.status === "active").length,
+          completedSangs: fetchedSangs.filter(s => s.status === "completed").length,
+        }));
 
       } catch (error) {
-        console.error("Error fetching admin data:", error);
+        console.error("Error fetching critical admin data:", error);
+      }
+
+      // 2. Secondary Data: Global Payments (might fail due to indexes)
+      try {
+        if (fetchedUsers.length > 0 && fetchedSangs.length > 0) {
+          const usersMap = new Map(fetchedUsers.map(u => [u.id, u]));
+          const sangsMap = new Map(fetchedSangs.map(s => [s.id, s]));
+
+          const paymentsQuery = query(
+            collectionGroup(db, 'members'),
+            where('paymentStatus', 'in', ['paid', 'reviewing'])
+          );
+          const paymentsSnap = await getDocs(paymentsQuery);
+
+          const payments = paymentsSnap.docs.map(doc => {
+            const data = doc.data();
+            const sang = sangsMap.get(data.sangId);
+            const user = usersMap.get(data.userId);
+
+            return {
+              id: doc.id,
+              ...data,
+              sangName: sang?.name || "Desconocido",
+              amount: sang?.contributionAmount || 0,
+              userName: user?.fullName || data.name || "Usuario",
+              date: data.lastPaymentDate?.toDate ? data.lastPaymentDate.toDate() : new Date(),
+              paymentStatus: data.paymentStatus
+            };
+          });
+
+          payments.sort((a, b) => b.date.getTime() - a.date.getTime());
+          setAllPayments(payments);
+
+          // Calculate Volume
+          const now = new Date();
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+          const currentMonthPayments = payments.filter(p =>
+            p.paymentStatus === 'paid' && p.date >= startOfMonth
+          );
+
+          const totalVolume = currentMonthPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+          setStats(prev => ({ ...prev, monthlyVolume: totalVolume }));
+        }
+      } catch (error) {
+        console.error("Error fetching payments check indexes:", error);
       } finally {
         setLoadingConfig(false);
       }

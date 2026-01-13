@@ -90,7 +90,7 @@ export default function CreateSANG() {
         startDate: new Date(form.startDate),
         turnAssignment: form.turnAssignment,
         organizerId: currentUser.uid,
-        status: "pending",
+        status: "active",
         inviteCode: inviteCode,
         currentTurn: 1,
         createdAt: serverTimestamp(),
