@@ -99,6 +99,11 @@ export default function Dashboard() {
                 } catch (e) { console.error("Error fetching active sang details", e); }
               }
 
+              // Assign userTurn
+              if (sangData) {
+                sangData.userTurn = memberData.turnNumber;
+              }
+
               // Calculate Next Payment for this active member
               if (sangData && sangData.status === 'active') {
                 const isPaid = memberData.paymentStatus === 'paid';
@@ -325,7 +330,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-4">
               {sangs.map((sang) => (
-                <SANGCard key={sang.id} sang={sang} userTurn={0} memberCount={sang.numberOfParticipants} />
+                <SANGCard key={sang.id} sang={sang} userTurn={(sang as any).userTurn} memberCount={sang.numberOfParticipants} />
               ))}
             </div>
           )}
