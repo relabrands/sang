@@ -48,7 +48,7 @@ export function SANGCard({ sang, userTurn, memberCount }: SANGCardProps) {
           <Users className="h-4 w-4" />
           <span>{memberCount || sang.numberOfParticipants} miembros</span>
         </div>
-        {userTurn && (
+        {!!userTurn && (
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">Tu turno:</span>
             <span className="font-semibold text-primary">#{userTurn}</span>
