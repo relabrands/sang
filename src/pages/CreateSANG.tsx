@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, DollarSign, Users, Calendar, Shuffle, ListOrdered, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
