@@ -13,7 +13,7 @@ import { collection, query, where, getDocs, collectionGroup, getDoc } from "fire
 const statusFilters: { value: SANGStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "active", label: "Activos" },
-  { value: "pending", label: "Pendientes (Recluting)" },
+  { value: "pending", label: "Pendientes" },
   { value: "completed", label: "Completados" },
 ];
 
@@ -29,11 +29,13 @@ export default function SANGList() {
       if (!currentUser) return;
       setLoading(true);
 
-      try {
-        const fetchedSangs: any[] = [];
-        const processedSangIds = new Set();
+      const fetchedSangs: any[] = [];
+      const processedSangIds = new Set();
+      let hasOrganizerError = false;
+      let hasMemberError = false;
 
-        // 1. Organizer SANGs
+      // 1. Organizer SANGs (Try-Catch independiente)
+      try {
         const qOrganizer = query(
           collection(db, "sangs"),
           where("organizerId", "==", currentUser.uid)
@@ -45,24 +47,29 @@ export default function SANGList() {
             processedSangIds.add(doc.id);
           }
         });
+      } catch (error) {
+        console.error("Error fetching organizer SANGs:", error);
+        hasOrganizerError = true;
+      }
 
-        // 2. Member SANGs (Active AND Pending Requests)
-        // We fetch ALL memberships for the user.
+      // 2. Member SANGs (Try-Catch independiente)
+      try {
         const membershipsQ = query(collectionGroup(db, 'members'), where('userId', '==', currentUser.uid));
         const membershipSnap = await getDocs(membershipsQ);
 
         const membershipPromises = membershipSnap.docs.map(async (memDoc) => {
-          // memDoc.data() contains { userId, status, ... }
-          // memDoc.ref.parent.parent is the SANG document reference
           const sangDocRef = memDoc.ref.parent.parent;
 
           if (sangDocRef) {
             if (!processedSangIds.has(sangDocRef.id)) {
-              // Ensure the SANG still exists
-              const sangSnap = await getDoc(sangDocRef);
-              if (sangSnap.exists()) {
-                processedSangIds.add(sangSnap.id);
-                return { id: sangSnap.id, ...sangSnap.data() };
+              try {
+                const sangSnap = await getDoc(sangDocRef);
+                if (sangSnap.exists()) {
+                  processedSangIds.add(sangSnap.id);
+                  return { id: sangSnap.id, ...sangSnap.data() };
+                }
+              } catch (e) {
+                console.error("Error fetching single SANG detail:", e);
               }
             }
           }
@@ -72,20 +79,23 @@ export default function SANGList() {
         const results = await Promise.all(membershipPromises);
         results.forEach(res => { if (res) fetchedSangs.push(res); });
 
-        // Normalize Dates
+      } catch (error) {
+        console.error("Error fetching member SANGs (Probable index missing):", error);
+        hasMemberError = true;
+      }
+
+      // Final Processing
+      try {
         const finalSangs = fetchedSangs.map(s => ({
           ...s,
           startDate: s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate || Date.now()),
           createdAt: s.createdAt?.toDate ? s.createdAt.toDate() : new Date()
         })) as SANG[];
 
-        // Sort by Created At Desc
         finalSangs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
         setSangs(finalSangs);
-
-      } catch (error) {
-        console.error("Error fetching SANG list:", error);
+      } catch (e) {
+        console.error("Error processing SANGs:", e);
       } finally {
         setLoading(false);
       }
@@ -152,6 +162,9 @@ export default function SANGList() {
               <Button variant="outline" onClick={() => setFilter("all")}>
                 Ver todos
               </Button>
+              <p className="text-xs text-muted-foreground mt-4 max-w-xs mx-auto">
+                Si eres organizador, asegúrate de que el campo "organizerId" coincida. Si eres miembro, espera a que se generen los índices.
+              </p>
             </div>
           ) : (
             filteredSangs.map((sang) => (
