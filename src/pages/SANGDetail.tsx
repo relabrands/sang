@@ -97,7 +97,7 @@ export default function SANGDetail() {
 
   const handleShareLink = () => {
     if (!sang) return;
-    const shareText = `¡Únete a mi SANG "${sang.name}" en SANG RD! Usa el código: ${sang.inviteCode}`;
+    const shareText = `¡Únete a mi SANG "${sang.name}" en TodosPonen! Usa el código: ${sang.inviteCode}`;
     if (navigator.share) {
       navigator.share({ title: "Únete a mi SANG", text: shareText, url: window.location.href });
     } else {
@@ -285,18 +285,18 @@ export default function SANGDetail() {
           <div className="grid grid-cols-3 gap-4 py-4 border-y border-border">
             <div className="text-center">
               <DollarSign className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
-              <p className="text-sm text-muted-foreground">Aporte</p>
-              <p className="font-semibold">RD$ {sang.contributionAmount.toLocaleString()}</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Aporte</p>
+              <p className="font-semibold text-sm md:text-base">RD$ {sang.contributionAmount.toLocaleString()}</p>
             </div>
             <div className="text-center">
               <Calendar className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
-              <p className="text-sm text-muted-foreground">Frecuencia</p>
-              <p className="font-semibold capitalize">{sang.frequency}</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Frecuencia</p>
+              <p className="font-semibold capitalize text-sm md:text-base">{sang.frequency}</p>
             </div>
             <div className="text-center">
               <Users className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
-              <p className="text-sm text-muted-foreground">Miembros</p>
-              <p className="font-semibold">{members.length} / {sang.numberOfParticipants}</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Miembros</p>
+              <p className="font-semibold text-sm md:text-base">{members.length} / {sang.numberOfParticipants}</p>
             </div>
           </div>
 

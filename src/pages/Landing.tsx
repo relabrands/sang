@@ -39,7 +39,7 @@ export default function Landing() {
             <div className="h-9 w-9 rounded-xl gradient-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold">S</span>
             </div>
-            <span className="font-bold text-xl tracking-tight">SANG RD</span>
+            <span className="font-bold text-xl tracking-tight">TodosPonen</span>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={() => navigate("/login")}>
@@ -65,7 +65,7 @@ export default function Landing() {
             <span className="text-primary">con confianza digital</span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            SANG RD moderniza la tradición dominicana del ahorro grupal. 
+            TodosPonen moderniza la tradición dominicana del ahorro grupal.
             Organiza, rastrea y completa tus SANGs con transparencia total.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -146,10 +146,10 @@ export default function Landing() {
               <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center">
                 <span className="text-primary-foreground font-bold text-sm">S</span>
               </div>
-              <span className="font-bold">SANG RD</span>
+              <span className="font-bold">TodosPonen</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              SANG RD no es una institución financiera. No manejamos dinero directamente.
+              TodosPonen no es una institución financiera. No manejamos dinero directamente.
             </p>
           </div>
         </div>

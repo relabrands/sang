@@ -210,7 +210,7 @@ export default function Dashboard() {
                 ¡Hola, {displayName.split(" ")[0]}! 👋
               </h1>
               <p className="text-muted-foreground">
-                Bienvenido de vuelta a SANG RD
+                Bienvenido de vuelta a TodosPonen
               </p>
             </div>
             <ReputationBadge score={displayScore} />

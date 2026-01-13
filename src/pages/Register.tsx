@@ -95,7 +95,7 @@ export default function Register() {
             </div>
             <h1 className="text-2xl font-bold">Crear Cuenta</h1>
             <p className="text-muted-foreground mt-1">
-              Únete a la comunidad SANG RD
+              Únete a la comunidad TodosPonen
             </p>
           </div>
 
@@ -191,7 +191,7 @@ export default function Register() {
 
           {/* Disclaimer */}
           <p className="text-xs text-muted-foreground text-center mt-4">
-            Al registrarte, aceptas que SANG RD no es una institución financiera
+            Al registrarte, aceptas que TodosPonen no es una institución financiera
             y no maneja dinero directamente.
           </p>
 

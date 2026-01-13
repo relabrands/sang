@@ -160,7 +160,7 @@ export default function AdminDashboard() {
             <span className="text-sm font-medium text-primary">Panel de Administración</span>
           </div>
           <h1 className="text-2xl font-bold">Dashboard Admin</h1>
-          <p className="text-muted-foreground">Vista general de la plataforma SANG RD</p>
+          <p className="text-muted-foreground">Vista general de la plataforma TodosPonen</p>
         </div>
 
         {/* Tabs */}

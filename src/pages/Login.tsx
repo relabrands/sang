@@ -92,7 +92,7 @@ export default function Login() {
             </div>
             <h1 className="text-2xl font-bold">Iniciar Sesión</h1>
             <p className="text-muted-foreground mt-1">
-              Bienvenido de vuelta a SANG RD
+              Bienvenido de vuelta a TodosPonen
             </p>
           </div>
 
