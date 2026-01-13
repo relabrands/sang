@@ -79,6 +79,18 @@ export default function JoinSANG() {
 
   const handleJoin = async () => {
     if (!currentUser || !sangPreview) return;
+
+    // Check for Bank Info
+    if (!userProfile?.bankName || !userProfile?.accountNumber || !userProfile?.cedula) {
+      toast({
+        title: "Información Bancaria Requerida",
+        description: "Debes completar tu perfil con tu cuenta bancaria y cédula para unirte.",
+        variant: "destructive"
+      });
+      setTimeout(() => navigate("/profile"), 2000);
+      return;
+    }
+
     setIsLoading(true);
 
     try {

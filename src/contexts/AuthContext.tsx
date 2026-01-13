@@ -10,6 +10,10 @@ interface UserProfile {
     role: "user" | "admin";
     reputationScore: number;
     createdAt: any;
+    bankName?: string;
+    accountType?: string;
+    accountNumber?: string;
+    cedula?: string;
 }
 
 interface AuthContextType {

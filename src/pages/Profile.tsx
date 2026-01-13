@@ -47,7 +47,11 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     fullName: "",
-    phoneNumber: ""
+    phoneNumber: "",
+    bankName: "",
+    accountType: "",
+    accountNumber: "",
+    cedula: ""
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -71,13 +75,21 @@ export default function Profile() {
     if (userProfile) {
       setEditForm({
         fullName: userProfile.fullName || "",
-        phoneNumber: (userProfile as any).phoneNumber || ""
+        phoneNumber: (userProfile as any).phoneNumber || "",
+        bankName: userProfile.bankName || "",
+        accountType: userProfile.accountType || "",
+        accountNumber: userProfile.accountNumber || "",
+        cedula: userProfile.cedula || ""
       });
     } else if (currentUser) {
       // Fallback if no profile doc yet
       setEditForm({
         fullName: currentUser.displayName || "",
-        phoneNumber: currentUser.phoneNumber || ""
+        phoneNumber: currentUser.phoneNumber || "",
+        bankName: "",
+        accountType: "",
+        accountNumber: "",
+        cedula: ""
       });
     }
   }, [userProfile, currentUser]);
@@ -122,6 +134,10 @@ export default function Profile() {
         email: currentUser?.email,
         fullName: editForm.fullName,
         phoneNumber: editForm.phoneNumber,
+        bankName: editForm.bankName,
+        accountType: editForm.accountType,
+        accountNumber: editForm.accountNumber,
+        cedula: editForm.cedula,
         updatedAt: serverTimestamp(),
         // Only set createdAt if it doesn't exist (handled by merge, but if new doc, we want it)
         // Ideally createdAt is set on registration, but for legacy/broken users:
@@ -312,6 +328,107 @@ export default function Profile() {
                 <p className="font-medium">{displayDate}</p>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Bank Info */}
+        <div className="bg-card rounded-2xl p-5 shadow-card mb-6 animate-slide-up" style={{ animationDelay: "150ms" }}>
+          <h2 className="font-semibold mb-4">Información Bancaria (Obligatorio)</h2>
+          <div className="space-y-4">
+
+            {/* Cedula */}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+                <Shield className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Cédula</p>
+                {isEditing ? (
+                  <Input
+                    value={editForm.cedula}
+                    onChange={(e) => setEditForm({ ...editForm, cedula: e.target.value })}
+                    placeholder="000-0000000-0"
+                    className="h-8 mt-1"
+                  />
+                ) : (
+                  <p className="font-medium">{userProfile?.cedula || "No registrada"}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Bank Name */}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Banco</p>
+                {isEditing ? (
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 mt-1"
+                    value={editForm.bankName}
+                    onChange={(e) => setEditForm({ ...editForm, bankName: e.target.value })}
+                  >
+                    <option value="">Selecciona un banco</option>
+                    <option value="Banco Popular">Banco Popular</option>
+                    <option value="Banreservas">Banreservas</option>
+                    <option value="BHD">BHD</option>
+                    <option value="Asociación Popular">Asociación Popular (APAP)</option>
+                    <option value="Scotiabank">Scotiabank</option>
+                    <option value="Santa Cruz">Santa Cruz</option>
+                    <option value="BDI">BDI</option>
+                    <option value="Vimenca">Vimenca</option>
+                    <option value="Ademi">Ademi</option>
+                  </select>
+                ) : (
+                  <p className="font-medium">{userProfile?.bankName || "No registrado"}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Account Type */}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Tipo de Cuenta</p>
+                {isEditing ? (
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 mt-1"
+                    value={editForm.accountType}
+                    onChange={(e) => setEditForm({ ...editForm, accountType: e.target.value })}
+                  >
+                    <option value="">Selecciona tipo</option>
+                    <option value="Ahorros">Cuenta de Ahorros</option>
+                    <option value="Corriente">Cuenta Corriente</option>
+                  </select>
+                ) : (
+                  <p className="font-medium">{userProfile?.accountType || "No registrada"}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Account Number */}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Número de Cuenta</p>
+                {isEditing ? (
+                  <Input
+                    value={editForm.accountNumber}
+                    onChange={(e) => setEditForm({ ...editForm, accountNumber: e.target.value })}
+                    placeholder="000000000"
+                    className="h-8 mt-1"
+                  />
+                ) : (
+                  <p className="font-medium font-mono">{userProfile?.accountNumber || "No registrado"}</p>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
 

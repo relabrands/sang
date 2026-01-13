@@ -17,6 +17,10 @@ export interface User {
   reputationScore: number;
   createdAt: Date;
   avatarUrl?: string;
+  bankName?: string;
+  accountType?: string;
+  accountNumber?: string;
+  cedula?: string;
 }
 
 export interface SANG {

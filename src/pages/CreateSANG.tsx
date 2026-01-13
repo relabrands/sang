@@ -37,7 +37,7 @@ const generateInviteCode = () => {
 export default function CreateSANG() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
@@ -77,6 +77,17 @@ export default function CreateSANG() {
     }
 
     if (!currentUser) return;
+
+    // Check for Bank Info
+    if (!userProfile?.bankName || !userProfile?.accountNumber || !userProfile?.cedula) {
+      toast({
+        title: "Información Bancaria Requerida",
+        description: "Debes completar tu perfil con tu cuenta bancaria para ser organizador.",
+        variant: "destructive"
+      });
+      setTimeout(() => navigate("/profile"), 2000);
+      return;
+    }
 
     setIsLoading(true);
 

@@ -5,6 +5,13 @@ import {
   DollarSign, Check, AlertCircle, Shuffle, Upload, ExternalLink
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -154,6 +161,24 @@ export default function SANGDetail() {
     try {
       await deleteDoc(doc(db, `sangs/${sang.id}/members`, memberId));
       toast({ title: "Solicitud rechazada" });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // View Member Details (Bank Info)
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [viewingMember, setViewingMember] = useState(false);
+
+  const handleViewDetails = async (userId: string) => {
+    setViewingMember(true);
+    try {
+      const uDoc = await getDoc(doc(db, "users", userId));
+      if (uDoc.exists()) {
+        setSelectedMember(uDoc.data());
+      } else {
+        toast({ variant: "destructive", title: "Error", description: "Perfil no encontrado" });
+      }
     } catch (e) {
       console.error(e);
     }
@@ -480,6 +505,13 @@ export default function SANGDetail() {
 
                 <div className="flex justify-end pt-2 border-t border-border/50 gap-2">
 
+                  {/* Organizer: View Bank Details */}
+                  {isOrganizer && (
+                    <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleViewDetails(member.userId)}>
+                      <DollarSign className="h-3 w-3 mr-1" /> Ver Cuenta
+                    </Button>
+                  )}
+
                   {/* Member Action: Upload Proof */}
                   {isMe && paymentStatus !== 'paid' && paymentStatus !== 'reviewing' && (
                     <Button
@@ -531,6 +563,75 @@ export default function SANGDetail() {
 
           {members.length === 0 && <p className="text-center text-muted-foreground">Esperando miembros...</p>}
         </div>
+
+        {/* Member Details Modal */}
+        <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Información del Miembro</DialogTitle>
+              <DialogDescription>Detalles de cuenta bancaria y contacto</DialogDescription>
+            </DialogHeader>
+            {selectedMember && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback>{getInitials(selectedMember.fullName)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-lg leading-none">{selectedMember.fullName}</p>
+                    <p className="text-sm text-muted-foreground">{selectedMember.email}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Cédula</p>
+                    <p className="font-mono font-medium">{selectedMember.cedula || "No registrada"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Teléfono</p>
+                    <p className="font-medium">{selectedMember.phoneNumber || "No registrado"}</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-muted/50 border border-border rounded-xl space-y-3">
+                  <p className="font-semibold text-sm text-primary flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" /> Datos Bancarios
+                  </p>
+                  <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
+                    <div className="space-y-0.5">
+                      <p className="text-muted-foreground text-xs">Banco</p>
+                      <p className="font-medium">{selectedMember.bankName || "No registrado"}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-muted-foreground text-xs">Tipo de Cuenta</p>
+                      <p className="font-medium">{selectedMember.accountType || "-"}</p>
+                    </div>
+                    <div className="col-span-2 space-y-0.5 pt-1">
+                      <p className="text-muted-foreground text-xs">Número de Cuenta</p>
+                      <div className="flex items-center justify-between bg-background p-2 rounded border border-input">
+                        <p className="font-mono font-bold tracking-wider">{selectedMember.accountNumber || "No registrado"}</p>
+                        {selectedMember.accountNumber && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedMember.accountNumber);
+                              toast({ title: "Copiado" });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </main>
 
       <BottomNav />
