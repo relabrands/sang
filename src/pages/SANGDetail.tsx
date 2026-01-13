@@ -234,6 +234,38 @@ export default function SANGDetail() {
     }
   };
 
+
+  // Organizer Payout Proof State
+  const payoutFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePayoutProofChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !sang || !currentMemberTurn) return;
+
+    if (!confirm(`¿Subir comprobante y confirmar entrega a ${currentMemberTurn.name}?`)) {
+      if (payoutFileInputRef.current) payoutFileInputRef.current.value = "";
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `payouts/${sang.id}/${sang.currentTurn}_${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      await updateDoc(doc(db, "sangs", sang.id), {
+        payoutStatus: 'paid_out',
+        lastPayoutProofUrl: downloadURL
+      });
+      toast({ title: "Entrega Confirmada", description: "Comprobante subido y turno marcado como pagado." });
+    } catch (error) {
+      console.error("Payout upload failed", error);
+      toast({ variant: "destructive", title: "Error", description: "Falló la subida del comprobante." });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleApprovePayment = async (memberId: string) => {
     try {
       await updateDoc(doc(db, `sangs/${sang!.id}/members`, memberId), {
@@ -267,6 +299,14 @@ export default function SANGDetail() {
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+
+      <input
+        type="file"
+        ref={payoutFileInputRef}
+        onChange={handlePayoutProofChange}
         accept="image/*"
         className="hidden"
       />
@@ -457,16 +497,10 @@ export default function SANGDetail() {
                     size="sm"
                     variant="secondary"
                     className="whitespace-nowrap shadow-sm"
-                    onClick={async () => {
-                      if (confirm(`¿Confirmas que has entregado el dinero a ${currentMemberTurn.name}?`)) {
-                        try {
-                          await updateDoc(doc(db, "sangs", sang.id), { payoutStatus: 'paid_out' });
-                          toast({ title: "Pago registrado", description: "Se ha marcado el turno como pagado." });
-                        } catch (e) { console.error(e); }
-                      }
-                    }}
+                    onClick={() => payoutFileInputRef.current?.click()}
+                    disabled={uploading}
                   >
-                    Confirmar Entrega
+                    {uploading ? "Subiendo..." : "Subir Comprobante y Entregar"}
                   </Button>
                 </div>
               </div>
