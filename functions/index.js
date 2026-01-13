@@ -127,3 +127,163 @@ exports.sendBroadcast = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('internal', 'Error enviando notificaciones: ' + error.message);
     }
 });
+
+// Helper: Send Email via Resend
+async function sendEmail(to, templateId, data) {
+    if (!to) {
+        console.log("No email provided for notification");
+        return;
+    }
+
+    try {
+        // Dynamic import for ESM compatibility
+        const { Resend } = await import('resend');
+        const resend = new Resend('re_Eh8ZGZy4_5kf3v2xby9oCwBxLUs3THEa5');
+
+        const templateSnap = await admin.firestore().collection('email_templates').doc(templateId).get();
+        if (!templateSnap.exists) {
+            console.log(`Template '${templateId}' not found. Skipping email.`);
+            return;
+        }
+
+        const { subject, bodyHtml } = templateSnap.data();
+
+        // Basic string interpolation {{key}}
+        let content = bodyHtml || "";
+        let subj = subject || "Notificación SANG Connect";
+
+        for (const [key, value] of Object.entries(data)) {
+            const regex = new RegExp(`{{${key}}}`, 'g');
+            content = content.replace(regex, value || '');
+            subj = subj.replace(regex, value || '');
+        }
+
+        await resend.emails.send({
+            from: 'TodosPonen <todosponen@nomi.do>',
+            to,
+            subject: subj,
+            html: content
+        });
+        console.log(`Email sent to ${to} [${templateId}]`);
+    } catch (error) {
+        console.error("Resend Error:", error);
+    }
+}
+
+// 4. On Member Status Update (Accept/Reject/Paid)
+exports.onMemberUpdate = functions.firestore
+    .document("sangs/{sangId}/members/{memberId}")
+    .onUpdate(async (change, context) => {
+        const after = change.after.data();
+        const before = change.before.data();
+        const sangId = context.params.sangId;
+
+        // Determine Email
+        let email = after.email;
+        if (!email && after.userId) {
+            try {
+                const userRecord = await admin.auth().getUser(after.userId);
+                email = userRecord.email;
+            } catch (e) {
+                console.error("Could not fetch user email", e);
+            }
+        }
+
+        if (!email) return;
+
+        // Get SANG details
+        const sangSnap = await admin.firestore().collection('sangs').doc(sangId).get();
+        const sangName = sangSnap.exists ? sangSnap.data().name : "SANG";
+
+        const templateData = {
+            memberName: after.name || "Miembro",
+            sangName: sangName,
+            role: after.role === 'organizer' ? 'Organizador' : 'Participante'
+        };
+
+        // Scenario 1: Request Accepted (Pending -> Active)
+        if (before.status === 'pending' && after.status === 'active') {
+            await sendEmail(email, 'request_accepted', templateData);
+        }
+
+        // Scenario 2: Request Rejected (Pending -> Rejected)
+        if (before.status === 'pending' && after.status === 'rejected') {
+            await sendEmail(email, 'request_rejected', templateData);
+        }
+
+        // Scenario 3: Payment Confirmed (Paid)
+        if (before.paymentStatus !== 'paid' && after.paymentStatus === 'paid') {
+            await sendEmail(email, 'payment_received', templateData);
+        }
+    });
+
+// 5. On SANG Update (Started / Turn Assigned / Payout)
+exports.onSangUpdate = functions.firestore
+    .document("sangs/{sangId}")
+    .onUpdate(async (change, context) => {
+        const after = change.after.data();
+        const before = change.before.data();
+        const sangId = context.params.sangId;
+
+        // Scenario: SANG Started (Pending -> Active)
+        if (before.status === 'pending' && after.status === 'active') {
+            const membersSnap = await admin.firestore().collection(`sangs/${sangId}/members`).where('status', '==', 'active').get();
+
+            // Send to all active members
+            const emailPromises = membersSnap.docs.map(async (docSnap) => {
+                const mData = docSnap.data();
+                let email = mData.email;
+                if (!email && mData.userId) {
+                    try {
+                        const u = await admin.auth().getUser(mData.userId);
+                        email = u.email;
+                    } catch (e) { }
+                }
+
+                if (email) {
+                    return sendEmail(email, 'sang_started', {
+                        memberName: mData.name || "Miembro",
+                        sangName: after.name,
+                        turnNumber: mData.turnNumber || "?",
+                        startDate: after.startDate ? new Date(after.startDate.toDate()).toLocaleDateString('es-DO') : "Pronto"
+                    });
+                }
+            });
+
+            await Promise.all(emailPromises);
+        }
+
+        // Scenario: Payout Confirmed (Recollecting -> Paid Out)
+        // Notify the member who owns the current turn
+        if (before.payoutStatus !== 'paid_out' && after.payoutStatus === 'paid_out') {
+            const currentTurn = after.currentTurn;
+
+            try {
+                const membersSnap = await admin.firestore().collection(`sangs/${sangId}/members`).where('turnNumber', '==', currentTurn).limit(1).get();
+
+                if (!membersSnap.empty) {
+                    const memberDoc = membersSnap.docs[0];
+                    const mData = memberDoc.data();
+                    let email = mData.email;
+
+                    if (!email && mData.userId) {
+                        try {
+                            const u = await admin.auth().getUser(mData.userId);
+                            email = u.email;
+                        } catch (e) { }
+                    }
+
+                    if (email) {
+                        await sendEmail(email, 'payout_processed', {
+                            memberName: mData.name || "Miembro",
+                            sangName: after.name,
+                            turnNumber: currentTurn,
+                            amount: (after.contributionAmount * after.numberOfParticipants).toLocaleString()
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error("Error sending payout notification:", error);
+            }
+        }
+    });

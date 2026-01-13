@@ -8,11 +8,11 @@ export default function Help() {
 
     const handleWhatsApp = () => {
         // Replace with real support number
-        window.open("https://wa.me/18092223333", "_blank");
+        window.open("https://wa.me/18297404861", "_blank");
     };
 
     const handleEmail = () => {
-        window.location.href = "mailto:soporte@todosponen.com";
+        window.location.href = "mailto:rsanchez@relabrands.com";
     };
 
     return (

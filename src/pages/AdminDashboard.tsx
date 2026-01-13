@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
+ArrowLeft,
   Users,
   AlertTriangle,
   DollarSign,
@@ -8,10 +8,15 @@ import {
   BarChart3,
   UserCheck,
   Shield,
-  Shield,
   ChevronRight,
   Bell,
-  Send
+  Send,
+  FileText,
+  Eye,
+  Plus,
+  Edit,
+  Save,
+  X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/Header";
@@ -23,19 +28,24 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db, functions } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
-import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot, setDoc, doc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { userProfile, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "sangs" | "payments" | "notifications">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "users" | "sangs" | "payments" | "notifications" | "templates">("overview");
 
   // Notification State
   const [notifTitle, setNotifTitle] = useState("");
   const [notifBody, setNotifBody] = useState("");
   const [sendingNotif, setSendingNotif] = useState(false);
+
+  // Template State
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null); // null = list mode, object = edit mode
+  const [previewTemplate, setPreviewTemplate] = useState<any>(null); // for modal
 
   // Real Data State
   const [stats, setStats] = useState({
@@ -95,10 +105,19 @@ export default function AdminDashboard() {
       setLoadingConfig(false);
     });
 
+
+    // 4. Templates Subscription
+    const qTemplates = collection(db, "email_templates");
+    const unsubTemplates = onSnapshot(qTemplates, (snapshot) => {
+      const tpls = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTemplates(tpls);
+    });
+
     return () => {
       unsubUsers();
       unsubSangs();
       unsubPayments();
+      unsubTemplates();
     };
   }, []);
 
@@ -203,6 +222,7 @@ export default function AdminDashboard() {
             { value: "sangs", label: "SANGs" },
             { value: "payments", label: "Pagos" },
             { value: "notifications", label: "Notificaciones" },
+            { value: "templates", label: "Plantillas" },
           ].map((tab) => (
             <Button
               key={tab.value}
@@ -527,7 +547,135 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+        {/* Templates Tab */}
+        {activeTab === "templates" && (
+          <div className="animate-slide-up">
+            {!editingTemplate ? (
+              // List View
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold">Plantillas de Correo</h2>
+                  <Button onClick={() => setEditingTemplate({ id: "", subject: "", bodyHtml: "" })}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva Plantilla
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {templates.map((tpl) => (
+                    <div key={tpl.id} className="bg-card p-4 rounded-xl shadow-sm border border-border">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <FileText className="h-4 w-4 text-primary" />
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => setEditingTemplate(tpl)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <h3 className="font-semibold">{tpl.subject || "Sin Asunto"}</h3>
+                      <p className="text-xs text-muted-foreground font-mono mt-1">{tpl.id}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              // Edit View
+              <div className="bg-card rounded-2xl p-6 shadow-card max-w-4xl mx-auto">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => setEditingTemplate(null)}>
+                      <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <h2 className="text-xl font-bold">
+                      {editingTemplate.id && templates.find(t => t.id === editingTemplate.id) ? "Editar Plantilla" : "Nueva Plantilla"}
+                    </h2>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setPreviewTemplate(editingTemplate)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Previsualizar
+                    </Button>
+                    <Button onClick={async () => {
+                      if (!editingTemplate.id) {
+                        toast({ variant: "destructive", title: "Error", description: "El ID es requerido" });
+                        return;
+                      }
+                      try {
+                        await setDoc(doc(db, "email_templates", editingTemplate.id), {
+                          subject: editingTemplate.subject,
+                          bodyHtml: editingTemplate.bodyHtml
+                        });
+                        toast({ title: "Guardado", description: "Plantilla actualizada correctamente." });
+                        setEditingTemplate(null);
+                      } catch (e) {
+                        console.error(e);
+                        toast({ variant: "destructive", title: "Error", description: "No se pudo guardar." });
+                      }
+                    }}>
+                      <Save className="h-4 w-4 mr-2" />
+                      Guardar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">ID de Plantilla (ej: request_accepted)</label>
+                      <input
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editingTemplate.id}
+                        onChange={(e) => setEditingTemplate({ ...editingTemplate, id: e.target.value })}
+                        disabled={!!templates.find(t => t.id === editingTemplate.id && editingTemplate.id !== "")} // Disable ID edit if existing
+                        placeholder="unique_id"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Asunto del Correo</label>
+                      <input
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editingTemplate.subject}
+                        onChange={(e) => setEditingTemplate({ ...editingTemplate, subject: e.target.value })}
+                        placeholder="Bienvenido a {{sangName}}"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Cuerpo HTML</label>
+                    <textarea
+                      className="flex min-h-[400px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+                      value={editingTemplate.bodyHtml}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, bodyHtml: e.target.value })}
+                      placeholder="<html>...</html>"
+                    />
+                    <p className="text-xs text-muted-foreground">Variables disponibles: {`{{memberName}}, {{sangName}}, {{turnNumber}}, {{role}}`}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
-    </div>
-  );
-}
+
+      {/* Preview Modal */}
+      {previewTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-background w-full max-w-3xl rounded-xl shadow-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="font-semibold">Previsualización: {previewTemplate.subject}</h3>
+              <Button variant="ghost" size="icon" onClick={() => setPreviewTemplate(null)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto p-0 bg-white">
+              <iframe
+                className="w-full h-full min-h-[500px]"
+                srcDoc={previewTemplate.bodyHtml}
+                title="Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
