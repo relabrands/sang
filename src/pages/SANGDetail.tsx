@@ -309,6 +309,43 @@ export default function SANGDetail() {
             </div>
           </div>
 
+          {sang.status === 'active' && (
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Progreso del SANG</span>
+                  <span className="font-medium">{Math.round(((sang.currentTurn - 1) / sang.numberOfParticipants) * 100)}%</span>
+                </div>
+                <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-500"
+                    style={{ width: `${((sang.currentTurn - 1) / sang.numberOfParticipants) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Turno {sang.currentTurn} de {sang.numberOfParticipants}
+                </p>
+              </div>
+
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
+                <Calendar className="h-5 w-5 text-primary mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Próximo Pago: {(() => {
+                    const d = new Date(sang.startDate);
+                    const turns = sang.currentTurn - 1;
+                    if (sang.frequency === 'weekly') d.setDate(d.getDate() + (turns * 7));
+                    if (sang.frequency === 'biweekly') d.setDate(d.getDate() + (turns * 14));
+                    if (sang.frequency === 'monthly') d.setMonth(d.getMonth() + turns);
+                    return d.toLocaleDateString("es-DO", { day: 'numeric', month: 'long', year: 'numeric' });
+                  })()}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Realiza tu pago antes de la fecha para mantener tu <span className="text-primary font-medium">Reputación al 100%</span>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {sang.status === 'pending' && (<div className="mt-4 p-3 bg-accent rounded-xl flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Código de invitación</p>
