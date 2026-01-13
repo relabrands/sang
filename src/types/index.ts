@@ -46,6 +46,11 @@ export interface SANGMember {
   turnNumber: number;
   status: 'pending' | 'approved' | 'rejected';
   joinedAt: Date;
+  name?: string;
+  paymentStatus?: PaymentStatus;
+  role?: string;
+  paymentProofUrl?: string;
+  lastPaymentDate?: Date;
 }
 
 export interface Payment {

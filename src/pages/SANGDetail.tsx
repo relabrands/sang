@@ -67,9 +67,18 @@ export default function SANGDetail() {
       const active: SANGMember[] = [];
       const pending: any[] = [];
 
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        const member = { id: doc.id, ...data } as SANGMember;
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        const member = { id: docSnap.id, ...data } as SANGMember;
+
+        // Auto-fix: If name is missing, fetch from profile and update doc
+        if (!member.name && member.userId) {
+          getDoc(doc(db, "users", member.userId)).then(snap => {
+            if (snap.exists()) {
+              updateDoc(docSnap.ref, { name: snap.data().fullName || "Usuario" });
+            }
+          }).catch(console.error);
+        }
 
         // Separate Active vs Pending Requests
         if (data.status === 'pending') {

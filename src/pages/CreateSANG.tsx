@@ -131,7 +131,8 @@ export default function CreateSANG() {
         turnNumber: 1,
         status: "approved",
         joinedAt: serverTimestamp(),
-        role: "organizer"
+        role: "organizer",
+        name: userProfile?.fullName || "Organizador",
       });
 
       toast({
