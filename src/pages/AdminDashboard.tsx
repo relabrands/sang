@@ -8,8 +8,12 @@ import {
   BarChart3,
   UserCheck,
   Shield,
-  ChevronRight
+  Shield,
+  ChevronRight,
+  Bell,
+  Send
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/Header";
 import { DashboardCard } from "@/components/DashboardCard";
 import { ReputationBadge } from "@/components/ReputationBadge";
@@ -17,14 +21,21 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { auth, db } from "@/lib/firebase";
+import { auth, db, functions } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { userProfile, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "sangs" | "payments">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "users" | "sangs" | "payments" | "notifications">("overview");
+
+  // Notification State
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifBody, setNotifBody] = useState("");
+  const [sendingNotif, setSendingNotif] = useState(false);
 
   // Real Data State
   const [stats, setStats] = useState({
@@ -139,6 +150,36 @@ export default function AdminDashboard() {
     return name ? name.split(" ").map((n) => n[0]).join("").toUpperCase() : "U";
   };
 
+  const handleSendBroadcast = async () => {
+    if (!notifTitle.trim() || !notifBody.trim()) {
+      toast({ variant: "destructive", title: "Campos requeridos", description: "Completa título y mensaje." });
+      return;
+    }
+
+    setSendingNotif(true);
+    try {
+      // Use httpsCallable directly or from functions instance
+      const sendBroadcast = httpsCallable(functions, 'sendBroadcast');
+      const result = await sendBroadcast({ title: notifTitle, body: notifBody }) as any;
+
+      if (result.data.success) {
+        toast({
+          title: "Notificación enviada",
+          description: `Enviada a ${result.data.count} dispositivos.`,
+        });
+        setNotifTitle("");
+        setNotifBody("");
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.data.message || "Error desconocido." });
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Error de envío", description: error.message });
+    } finally {
+      setSendingNotif(false);
+    }
+  };
+
   const handleLogout = async () => {
     await auth.signOut();
     navigate("/");
@@ -170,6 +211,7 @@ export default function AdminDashboard() {
             { value: "users", label: "Usuarios" },
             { value: "sangs", label: "SANGs" },
             { value: "payments", label: "Pagos" },
+            { value: "notifications", label: "Notificaciones" },
           ].map((tab) => (
             <Button
               key={tab.value}
@@ -433,6 +475,64 @@ export default function AdminDashboard() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Notifications Tab */}
+        {activeTab === "notifications" && (
+          <div className="max-w-xl mx-auto animate-slide-up">
+            <div className="bg-card rounded-2xl p-6 shadow-card">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Bell className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-lg">Enviar Notificación Push</h2>
+                  <p className="text-sm text-muted-foreground">Mensaje a todos los usuarios de la app</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Título</label>
+                  <input
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Ej: Nuevo SANG disponible"
+                    value={notifTitle}
+                    onChange={(e) => setNotifTitle(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Mensaje</label>
+                  <textarea
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    placeholder="Escribe el contenido de la notificación..."
+                    value={notifBody}
+                    onChange={(e) => setNotifBody(e.target.value)}
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    className="w-full gap-2"
+                    onClick={handleSendBroadcast}
+                    disabled={sendingNotif || !notifTitle || !notifBody}
+                  >
+                    {sendingNotif ? (
+                      "Enviando..."
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" /> Enviar Broadcast
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center mt-3">
+                    Se enviará a todos los dispositivos registrados con permisos de notificación.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}
