@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db } from "@/lib/firebase";
-import { collection, query, orderBy, getDocs, where, getCountFromServer } from "firebase/firestore";
+import { cn } from "@/lib/utils";
+import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup } from "firebase/firestore";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [recentSangs, setRecentSangs] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [allSangs, setAllSangs] = useState<any[]>([]);
+  const [allPayments, setAllPayments] = useState<any[]>([]);
 
   const [loadingConfig, setLoadingConfig] = useState(true);
 
@@ -49,29 +51,66 @@ export default function AdminDashboard() {
         const usersColl = collection(db, "users");
         const sangsColl = collection(db, "sangs");
 
-        // 1. Stats and Counts
-        const usersSnapshot = await getCountFromServer(usersColl);
-        const activeSangsSnapshot = await getCountFromServer(query(sangsColl, where("status", "==", "active")));
-
-        setStats(prev => ({
-          ...prev,
-          totalUsers: usersSnapshot.data().count,
-          activeSangs: activeSangsSnapshot.data().count
-        }));
-
-        // 2. Fetch All Data (for lists)
+        // 1. Fetch Data
         const allUsersQuery = query(usersColl, orderBy("createdAt", "desc"));
         const allUsersSnap = await getDocs(allUsersQuery);
         const users = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const usersMap = new Map(users.map(u => [u.id, u]));
 
         const allSangsQuery = query(sangsColl, orderBy("createdAt", "desc"));
         const allSangsSnap = await getDocs(allSangsQuery);
         const sangs = allSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const sangsMap = new Map(sangs.map(s => [s.id, s]));
+
+        // 2. Fetch Payments (Global)
+        const paymentsQuery = query(
+          collectionGroup(db, 'members'),
+          where('paymentStatus', 'in', ['paid', 'reviewing'])
+        );
+        const paymentsSnap = await getDocs(paymentsQuery);
+
+        const payments = paymentsSnap.docs.map(doc => {
+          const data = doc.data();
+          const sang = sangsMap.get(data.sangId);
+          const user = usersMap.get(data.userId);
+
+          return {
+            id: doc.id,
+            ...data,
+            sangName: sang?.name || "Desconocido",
+            amount: sang?.contributionAmount || 0,
+            userName: user?.fullName || data.name || "Usuario",
+            date: data.lastPaymentDate?.toDate ? data.lastPaymentDate.toDate() : new Date(),
+            paymentStatus: data.paymentStatus
+          };
+        });
+
+        // Current Month Volume
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const currentMonthPayments = payments.filter(p =>
+          p.paymentStatus === 'paid' && p.date >= startOfMonth
+        );
+
+        const totalVolume = currentMonthPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+        setStats({
+          totalUsers: users.length,
+          activeSangs: sangs.filter(s => s.status === "active").length,
+          completedSangs: sangs.filter(s => s.status === "completed").length,
+          monthlyVolume: totalVolume,
+          latePaymentRatio: 0,
+          averageReputation: 100,
+        });
 
         setAllUsers(users);
         setAllSangs(sangs);
         setRecentUsers(users.slice(0, 5));
         setRecentSangs(sangs.slice(0, 5));
+
+        payments.sort((a, b) => b.date.getTime() - a.date.getTime());
+        setAllPayments(payments);
 
       } catch (error) {
         console.error("Error fetching admin data:", error);
@@ -322,12 +361,65 @@ export default function AdminDashboard() {
 
         {/* Payments Tab Placeholder */}
         {activeTab === "payments" && (
-          <div className="text-center py-10">
-            <div className="bg-muted/30 rounded-2xl p-8 max-w-md mx-auto">
-              <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-              <p className="font-medium mb-2">Historial de Pagos Global</p>
-              <p className="text-sm text-muted-foreground mb-4">Esta función requiere escanear todos los miembros de todos los SANGs activamente.</p>
-              <Button variant="outline" onClick={() => setActiveTab("overview")}>Volver al Resumen</Button>
+          <div className="bg-card rounded-2xl p-5 shadow-card animate-slide-up">
+            <h2 className="font-semibold mb-4">Historial de Pagos Global</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-left text-sm text-muted-foreground border-b border-border">
+                    <th className="pb-3 font-medium">Usuario</th>
+                    <th className="pb-3 font-medium">SANG</th>
+                    <th className="pb-3 font-medium">Estado</th>
+                    <th className="pb-3 font-medium text-right">Monto</th>
+                    <th className="pb-3 font-medium text-right">Fecha</th>
+                    <th className="pb-3 font-medium text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPayments.map((payment) => (
+                    <tr key={payment.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="py-4 font-medium">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs">{getInitials(payment.userName)}</AvatarFallback>
+                          </Avatar>
+                          <span>{payment.userName}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 text-sm">{payment.sangName}</td>
+                      <td className="py-4">
+                        <span className={cn(
+                          "text-xs px-2 py-0.5 rounded-full capitalize",
+                          payment.paymentStatus === 'paid' ? "bg-success/10 text-success" :
+                            payment.paymentStatus === 'reviewing' ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground"
+                        )}>
+                          {payment.paymentStatus === 'paid' ? "Pagado" : "Revisando"}
+                        </span>
+                      </td>
+                      <td className="py-4 text-right font-medium">
+                        RD$ {payment.amount?.toLocaleString()}
+                      </td>
+                      <td className="py-4 text-right text-sm text-muted-foreground">
+                        {payment.date?.toLocaleDateString()}
+                      </td>
+                      <td className="py-4 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/sang/${payment.sangId}`)}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {allPayments.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center text-muted-foreground py-8">No hay pagos registrados aún.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
