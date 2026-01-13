@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-ArrowLeft,
+import {
+  ArrowLeft,
   Users,
   AlertTriangle,
   DollarSign,
@@ -679,3 +680,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
