@@ -345,20 +345,68 @@ export default function SANGDetail() {
         {/* Current Turn Highlight */}
         {sang.status === 'active' && currentMemberTurn && (
           <div className="gradient-primary rounded-2xl p-5 mb-6 animate-slide-up" style={{ animationDelay: "100ms" }}>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-primary-foreground/80 text-sm">Turno Actual</p>
-                <p className="text-primary-foreground text-2xl font-bold">
-                  #{sang.currentTurn} - {currentMemberTurn.name}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-primary-foreground text-2xl font-bold">
+                    #{sang.currentTurn} - {currentMemberTurn.name}
+                  </p>
+                  {/* Status Badge inside Card */}
+                  {sang.payoutStatus === 'paid_out' ? (
+                    <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
+                      <Check className="h-3 w-3 mr-1" /> Entregado
+                    </span>
+                  ) : (
+                    <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
+                      Recolectando
+                    </span>
+                  )}
+                </div>
+
                 <p className="text-primary-foreground/70 text-sm mt-1">
                   Recibe RD$ {(sang.contributionAmount * sang.numberOfParticipants).toLocaleString()}
                 </p>
               </div>
+
               <div className="h-16 w-16 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
                 <span className="text-primary-foreground text-2xl font-bold">{sang.currentTurn}</span>
               </div>
             </div>
+
+            {/* Organizer Payout Action */}
+            {isOrganizer && sang.payoutStatus !== 'paid_out' && (
+              <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-primary-foreground/90 text-xs">
+                    <p className="font-semibold mb-0.5">Administrar Turno</p>
+                    <p>Confirma cuando hayas entregado el dinero a {currentMemberTurn.name.split(" ")[0]}.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="whitespace-nowrap shadow-sm"
+                    onClick={async () => {
+                      if (confirm(`¿Confirmas que has entregado el dinero a ${currentMemberTurn.name}?`)) {
+                        try {
+                          await updateDoc(doc(db, "sangs", sang.id), { payoutStatus: 'paid_out' });
+                          toast({ title: "Pago registrado", description: "Se ha marcado el turno como pagado." });
+                        } catch (e) { console.error(e); }
+                      }
+                    }}
+                  >
+                    Confirmar Entrega
+                  </Button>
+                </div>
+              </div>
+            )}
+            {/* Legend/Info for Members */}
+            {!isOrganizer && (
+              <p className="text-primary-foreground/60 text-xs mt-2 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                El organizador confirmará cuando el dinero sea entregado.
+              </p>
+            )}
           </div>
         )}
 
