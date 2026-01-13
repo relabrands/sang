@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db, functions } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
-import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 
 export default function AdminDashboard() {
@@ -53,98 +53,89 @@ export default function AdminDashboard() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [allSangs, setAllSangs] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
+  const [rawPayments, setRawPayments] = useState<any[]>([]); // To store raw firestore data
 
   const [loadingConfig, setLoadingConfig] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      let fetchedUsers: any[] = [];
-      let fetchedSangs: any[] = [];
+    // 1. Users Subscription
+    const qUsers = query(collection(db, "users"), orderBy("createdAt", "desc"));
+    const unsubUsers = onSnapshot(qUsers, (snapshot) => {
+      const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAllUsers(users);
+      setRecentUsers(users.slice(0, 5));
+      setStats(prev => ({ ...prev, totalUsers: users.length }));
+    });
 
-      // 1. Critical Data: Users & SANGs
-      try {
-        const usersColl = collection(db, "users");
-        const sangsColl = collection(db, "sangs");
+    // 2. SANGs Subscription
+    const qSangs = query(collection(db, "sangs"), orderBy("createdAt", "desc"));
+    const unsubSangs = onSnapshot(qSangs, (snapshot) => {
+      const sangs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAllSangs(sangs);
+      setRecentSangs(sangs.slice(0, 5));
+      setStats(prev => ({
+        ...prev,
+        activeSangs: sangs.filter(s => s.status === "active").length,
+        completedSangs: sangs.filter(s => s.status === "completed").length,
+      }));
+    });
 
-        // Users
-        const allUsersQuery = query(usersColl, orderBy("createdAt", "desc"));
-        const allUsersSnap = await getDocs(allUsersQuery);
-        fetchedUsers = allUsersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // 3. Payments (Members) Subscription
+    // Note: Requires COLLECTION_GROUP_ASC index on 'members' for 'paymentStatus'
+    const qPayments = query(
+      collectionGroup(db, 'members'),
+      where('paymentStatus', 'in', ['paid', 'reviewing'])
+    );
+    const unsubPayments = onSnapshot(qPayments, (snapshot) => {
+      const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRawPayments(members);
+      setLoadingConfig(false);
+    }, (error) => {
+      console.error("Error/Index missing for payments listener:", error);
+      setLoadingConfig(false);
+    });
 
-        // SANGs
-        const allSangsQuery = query(sangsColl, orderBy("createdAt", "desc"));
-        const allSangsSnap = await getDocs(allSangsQuery);
-        fetchedSangs = allSangsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        setAllUsers(fetchedUsers);
-        setAllSangs(fetchedSangs);
-        setRecentUsers(fetchedUsers.slice(0, 5));
-        setRecentSangs(fetchedSangs.slice(0, 5));
-
-        // Initial Stats (defaults)
-        setStats(prev => ({
-          ...prev,
-          totalUsers: fetchedUsers.length,
-          activeSangs: fetchedSangs.filter(s => s.status === "active").length,
-          completedSangs: fetchedSangs.filter(s => s.status === "completed").length,
-        }));
-
-      } catch (error) {
-        console.error("Error fetching critical admin data:", error);
-      }
-
-      // 2. Secondary Data: Global Payments (might fail due to indexes)
-      try {
-        if (fetchedUsers.length > 0 && fetchedSangs.length > 0) {
-          const usersMap = new Map(fetchedUsers.map(u => [u.id, u]));
-          const sangsMap = new Map(fetchedSangs.map(s => [s.id, s]));
-
-          const paymentsQuery = query(
-            collectionGroup(db, 'members'),
-            where('paymentStatus', 'in', ['paid', 'reviewing'])
-          );
-          const paymentsSnap = await getDocs(paymentsQuery);
-
-          const payments = paymentsSnap.docs.map(doc => {
-            const data = doc.data();
-            const sang = sangsMap.get(data.sangId);
-            const user = usersMap.get(data.userId);
-
-            return {
-              id: doc.id,
-              ...data,
-              sangName: sang?.name || "Desconocido",
-              amount: sang?.contributionAmount || 0,
-              userName: user?.fullName || data.name || "Usuario",
-              date: data.lastPaymentDate?.toDate ? data.lastPaymentDate.toDate() : new Date(),
-              paymentStatus: data.paymentStatus
-            };
-          });
-
-          payments.sort((a, b) => b.date.getTime() - a.date.getTime());
-          setAllPayments(payments);
-
-          // Calculate Volume
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-          const currentMonthPayments = payments.filter(p =>
-            p.paymentStatus === 'paid' && p.date >= startOfMonth
-          );
-
-          const totalVolume = currentMonthPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-          setStats(prev => ({ ...prev, monthlyVolume: totalVolume }));
-        }
-      } catch (error) {
-        console.error("Error fetching payments check indexes:", error);
-      } finally {
-        setLoadingConfig(false);
-      }
+    return () => {
+      unsubUsers();
+      unsubSangs();
+      unsubPayments();
     };
-
-    fetchData();
   }, []);
+
+  // Derived Data Effect: Calculate Payments Details & Volume
+  useEffect(() => {
+    if (allSangs.length > 0) {
+      const sangsMap = new Map(allSangs.map(s => [s.id, s]));
+      const usersMap = new Map(allUsers.map(u => [u.id, u]));
+
+      const enrichedPayments = rawPayments.map(p => {
+        const sang = sangsMap.get(p.sangId);
+        const user = usersMap.get(p.userId);
+        return {
+          ...p,
+          sangName: sang?.name || "Desconocido",
+          amount: sang?.contributionAmount || 0,
+          userName: user?.fullName || p.name || "Usuario",
+          date: p.lastPaymentDate?.toDate ? p.lastPaymentDate.toDate() : new Date()
+        };
+      });
+
+      // Sort by date desc
+      enrichedPayments.sort((a: any, b: any) => b.date - a.date);
+      setAllPayments(enrichedPayments);
+
+      // Recalculate Monthly Volume
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const currentMonthPayments = enrichedPayments.filter(p =>
+        p.paymentStatus === 'paid' && p.date >= startOfMonth
+      );
+
+      const totalVolume = currentMonthPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+      setStats(prev => ({ ...prev, monthlyVolume: totalVolume }));
+    }
+  }, [allSangs, rawPayments, allUsers]);
 
   const getInitials = (name: string) => {
     return name ? name.split(" ").map((n) => n[0]).join("").toUpperCase() : "U";
