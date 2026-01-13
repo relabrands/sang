@@ -7,11 +7,21 @@ import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { currentUser } = useAuth();
+
+  useEffect(() => {
+    if (currentUser) {
+      navigate("/dashboard");
+    }
+  }, [currentUser, navigate]);
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({
@@ -70,17 +80,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="container py-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate("/")}
-          className="gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver
-        </Button>
-      </header>
+      {/* Header Removed */}
 
       {/* Content */}
       <div className="flex-1 flex items-center justify-center px-4 pb-16">
