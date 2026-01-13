@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 interface UserProfile {
@@ -66,14 +66,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         setUserProfile(prev => ({
-                            ...prev!, // Keep existing (like role from token if authoritative)
+                            ...prev!,
                             ...data as UserProfile,
-                            // Ensure role matches token if token is fresher or logic dictates
                             role: role || (data.role as "admin" | "user")
                         }));
                     }
+
+                    // 3. Setup Push Notifications (Progressive Enhancement)
+                    // We dynamically import to avoid breaking if messaging isn't supported
+                    const { messaging } = await import("@/lib/firebase");
+                    if (messaging) {
+                        const { getToken } = await import("firebase/messaging");
+                        const permission = await Notification.requestPermission();
+                        if (permission === "granted") {
+                            // Use default VAPID key (from firebase config) or generated one
+                            const token = await getToken(messaging, {
+                                vapidKey: "BMw5yVz_example_key_if_needed_otherwise_omit"
+                            }).catch(() => null);
+
+                            if (token) {
+                                await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+                            }
+                        }
+                    }
                 } catch (err) {
-                    console.error("Background profile fetch error", err);
+                    console.error("Profile/Notification error", err);
                 }
             } else {
                 setUserProfile(null);

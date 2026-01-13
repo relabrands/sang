@@ -1,8 +1,8 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getAnalytics, isSupported } from "firebase/analytics";
+import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,30 +11,20 @@ const firebaseConfig = {
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Debug check for missing config in production
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    console.warn("⚠️ Firebase Config appears incomplete. Check your environment variables.", {
-        apiKeyProvided: !!firebaseConfig.apiKey,
-        projectIdProvided: !!firebaseConfig.projectId,
-        authDomainProvided: !!firebaseConfig.authDomain
-    });
-}
-
-// Prevent re-initialization (Next.js safe)
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-
-// Core services
+const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Analytics (only on client)
-export const analytics =
-    typeof window !== "undefined"
-        ? isSupported().then((yes) => (yes ? getAnalytics(app) : null))
-        : null;
-
+let messaging: any;
+try {
+    if (typeof window !== "undefined") {
+        messaging = getMessaging(app);
+    }
+} catch (err) {
+    console.log("Firebase Messaging not supported in this environment");
+}
+export { messaging };
 export default app;
