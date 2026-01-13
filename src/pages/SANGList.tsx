@@ -31,10 +31,8 @@ export default function SANGList() {
 
       const fetchedSangs: any[] = [];
       const processedSangIds = new Set();
-      let hasOrganizerError = false;
-      let hasMemberError = false;
 
-      // 1. Organizer SANGs (Try-Catch independiente)
+      // 1. Organizer SANGs
       try {
         const qOrganizer = query(
           collection(db, "sangs"),
@@ -49,10 +47,9 @@ export default function SANGList() {
         });
       } catch (error) {
         console.error("Error fetching organizer SANGs:", error);
-        hasOrganizerError = true;
       }
 
-      // 2. Member SANGs (Try-Catch independiente)
+      // 2. Member SANGs
       try {
         const membershipsQ = query(collectionGroup(db, 'members'), where('userId', '==', currentUser.uid));
         const membershipSnap = await getDocs(membershipsQ);
@@ -80,8 +77,7 @@ export default function SANGList() {
         results.forEach(res => { if (res) fetchedSangs.push(res); });
 
       } catch (error) {
-        console.error("Error fetching member SANGs (Probable index missing):", error);
-        hasMemberError = true;
+        console.error("Error fetching member SANGs:", error);
       }
 
       // Final Processing
@@ -162,9 +158,9 @@ export default function SANGList() {
               <Button variant="outline" onClick={() => setFilter("all")}>
                 Ver todos
               </Button>
-              <p className="text-xs text-muted-foreground mt-4 max-w-xs mx-auto">
-                Si eres organizador, asegúrate de que el campo "organizerId" coincida. Si eres miembro, espera a que se generen los índices.
-              </p>
+              {/* <div className="mt-8 p-4 bg-muted/50 rounded text-xs text-muted-foreground font-mono">
+                Debug ID: {currentUser?.uid}
+              </div> */}
             </div>
           ) : (
             filteredSangs.map((sang) => (
