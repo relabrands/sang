@@ -36,7 +36,9 @@ export interface SANG {
   inviteCode: string;
   createdAt: Date;
   currentTurn: number;
+  currentTurn: number;
   payoutStatus?: 'collecting' | 'paid_out';
+  lastPayoutProofUrl?: string;
 }
 
 export interface SANGMember {
