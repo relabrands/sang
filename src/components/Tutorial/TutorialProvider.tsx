@@ -125,7 +125,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status as any)) {
             setRun(false);
             markComplete();
-        } else if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
+        } else if (type === EVENTS.TARGET_NOT_FOUND) {
+            console.warn("Tour target not found, stopping tour to prevent crash.");
+            setRun(false);
+        } else if (type === EVENTS.STEP_AFTER) {
             // Logic for navigation based on NEXT step
             // Current index is the one just finished (or failed)
             const nextIndex = index + (action === 'prev' ? -1 : 1);
@@ -165,13 +168,16 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             <Joyride
                 run={run}
-                steps={steps}
+                steps={steps.map(s => ({ ...s, disableBeacon: true }))}
                 stepIndex={stepIndex}
                 callback={handleJoyrideCallback}
                 continuous
                 showProgress
                 showSkipButton
                 disableOverlayClose
+                floaterProps={{
+                    disableAnimation: true, // Prevents crash on some React environments
+                }}
                 locale={{
                     back: 'Atrás',
                     close: 'Cerrar',
@@ -204,7 +210,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             {children}
 
             {!run && !showModal && userProfile && (
-                <TourButton onClick={startTutorial} />
+                <TourButton onStartTutorial={startTutorial} />
             )}
         </TutorialContext.Provider>
     );

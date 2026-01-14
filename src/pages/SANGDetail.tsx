@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, storage } from "@/lib/firebase";
-import { doc, getDoc, updateDoc, collection, onSnapshot, query, serverTimestamp, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, collection, onSnapshot, query, serverTimestamp, deleteDoc, increment, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { SANG, SANGMember } from "@/types";
 import { cn } from "@/lib/utils";
@@ -301,6 +301,54 @@ export default function SANGDetail() {
       .substring(0, 2);
   };
 
+  const handleNextTurn = async () => {
+    if (!sang) return;
+
+    const isLastTurn = sang.currentTurn >= sang.numberOfParticipants;
+
+    if (confirm(isLastTurn ? "¿Finalizar este SANG?" : `¿Iniciar el Turno #${sang.currentTurn + 1}?`)) {
+      try {
+        const sangRef = doc(db, "sangs", sang.id);
+
+        if (isLastTurn) {
+          await updateDoc(sangRef, {
+            status: 'completed',
+            completedAt: serverTimestamp()
+          });
+          toast({ title: "¡SANG Completado!", description: "Felicidades a todos los participantes." });
+          navigate("/dashboard");
+        } else {
+          await updateDoc(sangRef, {
+            currentTurn: increment(1),
+            payoutStatus: deleteField(),
+            // Reset member payment statuses for the new round? 
+            // Actually, usually in SANGs, you track payments PER turn.
+            // Our current data model stores ONE status per member.
+            // A robust system would have a subcollection 'payments' or 'turns'.
+            // For MVP/Current Model, we must reset member `paymentStatus` to 'pending' for the new turn.
+          });
+
+          // Reset all members to pending payment
+          // This must be done via a batch or individual updates
+          // Since we don't have batch easily accessible/configured here or extensive imports, let's loop.
+          // Ideally use a Cloud Function, but client-side for now for responsiveness.
+          members.forEach(m => {
+            updateDoc(doc(db, `sangs/${sang.id}/members`, m.id), {
+              paymentStatus: 'pending',
+              paymentProofUrl: deleteField(),
+              lastPaymentDate: deleteField()
+            });
+          });
+
+          toast({ title: "Nuevo Turno Iniciado", description: `Estamos en el turno ${sang.currentTurn + 1}.` });
+        }
+      } catch (e) {
+        console.error(e);
+        toast({ variant: "destructive", title: "Error", description: "No se pudo avanzar el turno." });
+      }
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex justify-center items-center">Cargando detalles...</div>;
   if (!sang) return <div className="min-h-screen flex justify-center items-center">SANG no encontrado</div>;
 
@@ -558,23 +606,40 @@ export default function SANGDetail() {
             </div>
 
             {/* Organizer Payout Action */}
-            {isOrganizer && sang.payoutStatus !== 'paid_out' && (
+            {isOrganizer && (
               <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="text-primary-foreground/90 text-xs">
-                    <p className="font-semibold mb-0.5">Administrar Turno</p>
-                    <p>Confirma cuando hayas entregado el dinero a {currentMemberTurn.name.split(" ")[0]}.</p>
+                {sang.payoutStatus !== 'paid_out' ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-primary-foreground/90 text-xs">
+                      <p className="font-semibold mb-0.5">Administrar Turno</p>
+                      <p>Confirma cuando hayas entregado el dinero a {currentMemberTurn?.name.split(" ")[0] || "Miembro"}.</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="whitespace-nowrap shadow-sm"
+                      onClick={() => payoutFileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      {uploading ? "Subiendo..." : "Subir Comprobante y Entregar"}
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="whitespace-nowrap shadow-sm"
-                    onClick={() => payoutFileInputRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? "Subiendo..." : "Subir Comprobante y Entregar"}
-                  </Button>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-primary-foreground/90 text-xs">
+                      <p className="font-semibold mb-0.5">Turno Completado</p>
+                      <p>El dinero fue entregado. ¿Listo para el siguiente?</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-white text-primary hover:bg-white/90 whitespace-nowrap shadow-sm font-bold"
+                      onClick={handleNextTurn}
+                    >
+                      {sang.currentTurn >= sang.numberOfParticipants ? "Finalizar SANG" : "Iniciar Siguiente Turno"}
+                      <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             {/* Legend/Info for Members */}
