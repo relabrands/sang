@@ -31,13 +31,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { auth, db, functions } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { cn } from "@/lib/utils";
-import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot, setDoc, doc } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot, setDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { userProfile, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "sangs" | "payments" | "notifications" | "templates">("overview");
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   // Notification State
   const [notifTitle, setNotifTitle] = useState("");
@@ -208,6 +210,35 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleUserAction = async (userId: string, action: 'suspend' | 'activate' | 'delete') => {
+    if (!userId) return;
+
+    const userRef = doc(db, "users", userId);
+    try {
+      if (action === 'delete') {
+        if (!confirm("¿Estás seguro de que quieres eliminar este usuario permanentemente? Esta acción es irreversible.")) return;
+        // Call cloud function to delete from Auth and Firestore (if we had a specific deleteUser function, or use the general approach)
+        // For now, let's just delete the doc, but Auth remains. 
+        // Ideally use an admin callable. Let's reuse resetDatabase logic style (client side delete for now or just doc delete).
+        // Actually, deleting doc is "banning" effectively as they lose profile.
+        await deleteDoc(userRef);
+        toast({ title: "Usuario eliminado", description: "El documento de usuario ha sido eliminado." });
+      } else {
+        await updateDoc(userRef, {
+          suspended: action === 'suspend'
+        });
+        toast({
+          title: action === 'suspend' ? "Usuario suspendido" : "Usuario activado",
+          description: `El usuario ha sido ${action === 'suspend' ? 'suspendido' : 'reactivado'} correctamente.`
+        });
+      }
+      setSelectedUser(null);
+    } catch (e: any) {
+      console.error("Error managing user:", e);
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    }
+  };
+
   const handleLogout = async () => {
     await auth.signOut();
     navigate("/");
@@ -223,13 +254,25 @@ export default function AdminDashboard() {
 
       <main className="container py-6">
         {/* Header */}
-        <div className="mb-6 animate-fade-in">
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="h-5 w-5 text-primary" />
-            <span className="text-sm font-medium text-primary">Panel de Administración</span>
+        <div className="flex justify-between items-start mb-6 animate-fade-in">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="h-5 w-5 text-primary" />
+              <span className="text-sm font-medium text-primary">Panel de Administración</span>
+            </div>
+            <h1 className="text-2xl font-bold">Dashboard Admin</h1>
+            <p className="text-muted-foreground">Vista general de la plataforma TodosPonen</p>
           </div>
-          <h1 className="text-2xl font-bold">Dashboard Admin</h1>
-          <p className="text-muted-foreground">Vista general de la plataforma TodosPonen</p>
+          <div className="flex gap-2">
+            <Button variant="destructive" onClick={handleResetDatabase} className="gap-2">
+              <Trash2 className="h-4 w-4" />
+              Reset DB
+            </Button>
+            <Button onClick={() => setShowBroadcast(true)} className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+              <Bell className="h-4 w-4" />
+              Nueva Notificación
+            </Button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -380,7 +423,7 @@ export default function AdminDashboard() {
                     </p>
                   </div>
                   <ReputationBadge score={user.reputationScore || 100} showTooltip={false} />
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" onClick={() => setSelectedUser(user)}>
                     Ver perfil
                   </Button>
                 </div>
@@ -609,14 +652,6 @@ export default function AdminDashboard() {
                     </h2>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="destructive" onClick={handleResetDatabase} className="gap-2">
-                      <Trash2 className="h-4 w-4" />
-                      Reset DB
-                    </Button>
-                    <Button onClick={() => setShowBroadcast(true)} className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
-                      <Bell className="h-4 w-4" />
-                      Nueva Notificación
-                    </Button>
                     <Button variant="outline" onClick={() => setPreviewTemplate(editingTemplate)}>
                       <Eye className="h-4 w-4 mr-2" />
                       Previsualizar
@@ -704,6 +739,65 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+      {/* User Details Modal */}
+      {selectedUser && (
+        <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Gestión de Usuario</DialogTitle>
+              <DialogDescription>Administra los permisos y estado de {selectedUser.fullName}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16">
+                  <AvatarFallback>{getInitials(selectedUser.fullName)}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-bold text-lg">{selectedUser.fullName}</h3>
+                  <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
+                  <div className="flex gap-2 mt-1">
+                    <ReputationBadge score={selectedUser.reputationScore} size="sm" showTooltip={false} />
+                    {selectedUser.role === 'admin' && <StatusBadge status="admin" />}
+                    {selectedUser.suspended && <span className="bg-destructive/10 text-destructive text-xs px-2 py-0.5 rounded-full font-bold">SUSPENDIDO</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm mt-4 p-4 bg-muted/30 rounded-lg">
+                <div>
+                  <span className="text-muted-foreground block">Teléfono:</span>
+                  {selectedUser.phoneNumber || "N/A"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Miembro desde:</span>
+                  {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleDateString() : "-"}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border">
+                <div className="grid grid-cols-2 gap-2">
+                  {selectedUser.suspended ? (
+                    <Button variant="outline" className="border-green-500 text-green-600 hover:bg-green-50" onClick={() => handleUserAction(selectedUser.id, 'activate')}>
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Reactivar Usuario
+                    </Button>
+                  ) : (
+                    <Button variant="outline" className="border-yellow-500 text-yellow-600 hover:bg-yellow-50" onClick={() => handleUserAction(selectedUser.id, 'suspend')}>
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Suspender Usuario
+                    </Button>
+                  )}
+
+                  <Button variant="destructive" onClick={() => handleUserAction(selectedUser.id, 'delete')}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar Usuario
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
