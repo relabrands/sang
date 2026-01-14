@@ -82,16 +82,18 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
     ];
 
-    // Check if tutorial has been seen
+    // Check if tutorial has been seen, but only on mobile
     useEffect(() => {
-        if (userProfile && !userProfile.tutorialSeen && !run && !showModal) {
+        const isDesktop = window.innerWidth > 768; // Simple breakpoint for mobile vs desktop
+
+        if (userProfile && !userProfile.tutorialSeen && !run && !showModal && !isDesktop) {
             // Small delay to ensure UI is ready
             const timer = setTimeout(() => {
                 setShowModal(true);
             }, 1000);
             return () => clearTimeout(timer);
         }
-    }, [userProfile, run, showModal]);
+    }, [userProfile?.tutorialSeen, run, showModal]); // Fix: only depend on tutorialSeen specifically to avoid deep object cycle re-triggers
 
     const markComplete = async () => {
         if (currentUser) {
@@ -209,7 +211,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             {children}
 
-            {!run && !showModal && userProfile && (
+            {!run && !showModal && userProfile && (window.innerWidth <= 768) && (
                 <TourButton onStartTutorial={startTutorial} />
             )}
         </TutorialContext.Provider>
