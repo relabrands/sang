@@ -19,6 +19,8 @@ import Help from "./pages/Help";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
+import { TutorialProvider } from "@/components/Tutorial/TutorialProvider";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -28,92 +30,94 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/create-sang"
-              element={
-                <ProtectedRoute>
-                  <CreateSANG />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/join-sang"
-              element={
-                <ProtectedRoute>
-                  <JoinSANG />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/sang/:id"
-              element={
-                <ProtectedRoute>
-                  <SANGDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/sangs"
-              element={
-                <ProtectedRoute>
-                  <SANGList />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/notifications"
-              element={
-                <ProtectedRoute>
-                  <Notifications />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/security"
-              element={
-                <ProtectedRoute>
-                  <Security />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/help"
-              element={
-                <ProtectedRoute>
-                  <Help />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requireAdmin={true}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <TutorialProvider>
+            <Routes>
+              <Route path="/" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/create-sang"
+                element={
+                  <ProtectedRoute>
+                    <CreateSANG />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/join-sang"
+                element={
+                  <ProtectedRoute>
+                    <JoinSANG />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sang/:id"
+                element={
+                  <ProtectedRoute>
+                    <SANGDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sangs"
+                element={
+                  <ProtectedRoute>
+                    <SANGList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <ProtectedRoute>
+                    <Notifications />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/security"
+                element={
+                  <ProtectedRoute>
+                    <Security />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/help"
+                element={
+                  <ProtectedRoute>
+                    <Help />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requireAdmin={true}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TutorialProvider>
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

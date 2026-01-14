@@ -2,7 +2,7 @@ export type UserRole = 'user' | 'admin';
 
 export type SANGStatus = 'pending' | 'active' | 'completed' | 'suspended';
 
-export type PaymentStatus = 'paid' | 'pending' | 'late';
+export type PaymentStatus = 'paid' | 'pending' | 'late' | 'reviewing';
 
 export type TurnAssignment = 'random' | 'manual';
 
@@ -21,6 +21,7 @@ export interface User {
   accountType?: string;
   accountNumber?: string;
   cedula?: string;
+  tutorialSeen?: boolean;
 }
 
 export interface SANG {
@@ -35,7 +36,7 @@ export interface SANG {
   status: SANGStatus;
   inviteCode: string;
   createdAt: Date;
-  currentTurn: number;
+
   currentTurn: number;
   payoutStatus?: 'collecting' | 'paid_out';
   lastPayoutProofUrl?: string;

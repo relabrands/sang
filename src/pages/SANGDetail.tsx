@@ -606,7 +606,7 @@ export default function SANGDetail() {
         </div>
 
         {/* Timeline/Member List */}
-        <div className="space-y-3 animate-fade-in">
+        <div className="space-y-3 animate-fade-in" data-tour="sang-turns">
           {members.map((member) => {
             const isMe = currentUser && member.userId === currentUser.uid;
             const paymentStatus = member.paymentStatus || 'pending';
@@ -672,6 +672,7 @@ export default function SANGDetail() {
                       className="gap-2"
                       onClick={() => triggerUpload(member.id)}
                       disabled={uploading}
+                      data-tour="sang-payments"
                     >
                       {uploading && targetMemberId === member.id ? (
                         <>Subiendo...</>

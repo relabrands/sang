@@ -296,7 +296,7 @@ export default function Profile() {
             <p className="text-2xl font-bold text-primary">{stats.participated}</p>
             <p className="text-xs text-muted-foreground">Participaciones</p>
           </div>
-          <div className="bg-card rounded-xl p-4 text-center shadow-card">
+          <div className="bg-card rounded-xl p-4 text-center shadow-card" data-tour="profile-reputation">
             <p className="text-2xl font-bold text-success">{stats.timelyPaymentRate}%</p>
             <p className="text-xs text-muted-foreground">Pagos a Tiempo</p>
           </div>

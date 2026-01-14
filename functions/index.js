@@ -295,56 +295,63 @@ exports.onUserCreate = functions.firestore
     .onCreate(async (snap, context) => {
         const userData = snap.data();
 
-        // 7. Reset Database (Admin Only)
-        exports.resetDatabase = functions.https.onCall(async (data, context) => {
-            // 1. Verify Authentication & Admin Role
-            if (!context.auth || context.auth.token.role !== 'admin') {
-                throw new functions.https.HttpsError(
-                    'permission-denied',
-                    'Solo los administradores pueden resetear la base de datos.'
-                );
-            }
+        if (userData.email) {
+            await sendEmail(userData.email, 'welcome_email', {
+                memberName: userData.fullName || userData.displayName || "Nuevo Usuario"
+            });
+        }
+    });
 
-            try {
-                const db = admin.firestore();
-                const batch = db.batch();
+// 7. Reset Database (Admin Only)
+exports.resetDatabase = functions.https.onCall(async (data, context) => {
+    // 1. Verify Authentication & Admin Role
+    if (!context.auth || context.auth.token.role !== 'admin') {
+        throw new functions.https.HttpsError(
+            'permission-denied',
+            'Solo los administradores pueden resetear la base de datos.'
+        );
+    }
 
-                // 1. Delete all SANGs (and subcollections)
-                // Note: recursiveDelete is better for subcollections, but for MVP we'll try standard approaches or use tools.
-                // admin.firestore().recursiveDelete is available in Admin SDK v11+
+    try {
+        const db = admin.firestore();
+        const batch = db.batch();
 
-                console.log("Starting Database Reset...");
+        // 1. Delete all SANGs (and subcollections)
+        // Note: recursiveDelete is better for subcollections, but for MVP we'll try standard approaches or use tools.
+        // admin.firestore().recursiveDelete is available in Admin SDK v11+
 
-                // Delete 'sangs' collection recursively
-                const sangsRef = db.collection('sangs');
-                await db.recursiveDelete(sangsRef);
+        console.log("Starting Database Reset...");
 
-                // Delete 'users' collection (except current admin)
-                const usersRef = db.collection('users');
-                const usersSnap = await usersRef.get();
+        // Delete 'sangs' collection recursively
+        const sangsRef = db.collection('sangs');
+        await db.recursiveDelete(sangsRef);
 
-                const deleteUserPromises = [];
-                usersSnap.docs.forEach(doc => {
-                    if (doc.id !== context.auth.uid) {
-                        // We can't use recursiveDelete if we want to filter specific docs easily without a Query
-                        // But users usually don't have deep subcollections in this app yet.
-                        // Actually, let's just delete the doc.
-                        deleteUserPromises.push(doc.ref.delete());
+        // Delete 'users' collection (except current admin)
+        const usersRef = db.collection('users');
+        const usersSnap = await usersRef.get();
 
-                        // Also delete from Auth?
-                        // data.deleteAuth is optional flag? Let's assume yes for a full reset.
-                        // But deleting from Auth requires admin.auth().deleteUser(uid)
-                        deleteUserPromises.push(admin.auth().deleteUser(doc.id).catch(e => console.log("Auth delete error", e)));
-                    }
-                });
+        const deleteUserPromises = [];
+        usersSnap.docs.forEach(doc => {
+            if (doc.id !== context.auth.uid) {
+                // We can't use recursiveDelete if we want to filter specific docs easily without a Query
+                // But users usually don't have deep subcollections in this app yet.
+                // Actually, let's just delete the doc.
+                deleteUserPromises.push(doc.ref.delete());
 
-                await Promise.all(deleteUserPromises);
-
-                console.log("Database Reset Complete.");
-                return { success: true, message: "Base de datos reseteada con éxito." };
-
-            } catch (error) {
-                console.error("Reset Error:", error);
-                throw new functions.https.HttpsError('internal', 'Error reseteando base de datos: ' + error.message);
+                // Also delete from Auth?
+                // data.deleteAuth is optional flag? Let's assume yes for a full reset.
+                // But deleting from Auth requires admin.auth().deleteUser(uid)
+                deleteUserPromises.push(admin.auth().deleteUser(doc.id).catch(e => console.log("Auth delete error", e)));
             }
         });
+
+        await Promise.all(deleteUserPromises);
+
+        console.log("Database Reset Complete.");
+        return { success: true, message: "Base de datos reseteada con éxito." };
+
+    } catch (error) {
+        console.error("Reset Error:", error);
+        throw new functions.https.HttpsError('internal', 'Error reseteando base de datos: ' + error.message);
+    }
+});

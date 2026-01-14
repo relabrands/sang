@@ -25,15 +25,16 @@ export function BottomNav() {
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
-          
+
           return (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
+              data-tour={item.path === '/sangs' ? 'nav-sangs' : undefined}
               className={cn(
                 "flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-200",
-                isActive 
-                  ? "text-primary bg-accent" 
+                isActive
+                  ? "text-primary bg-accent"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >

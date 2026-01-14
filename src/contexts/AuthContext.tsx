@@ -14,6 +14,7 @@ interface UserProfile {
     accountType?: string;
     accountNumber?: string;
     cedula?: string;
+    tutorialSeen?: boolean;
 }
 
 interface AuthContextType {

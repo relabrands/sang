@@ -219,11 +219,13 @@ export default function Dashboard() {
 
         {/* Quick Stats */}
         <section className="grid grid-cols-2 gap-4 animate-slide-up">
-          <DashboardCard
-            title="SANGs Activos"
-            value={sangs.filter((s) => s.status === "active" || s.status === "pending").length}
-            icon={Users}
-          />
+          <div data-tour="dashboard-summary">
+            <DashboardCard
+              title="SANGs Activos"
+              value={sangs.filter((s) => s.status === "active" || s.status === "pending").length}
+              icon={Users}
+            />
+          </div>
           <DashboardCard
             title="Próximo Pago"
             value={`RD$ ${totalNextPayment.toLocaleString()}`}
@@ -294,6 +296,7 @@ export default function Dashboard() {
             variant="outline"
             className="h-auto py-4 flex flex-col gap-2"
             onClick={() => navigate("/create-sang")}
+            data-tour="create-sang-btn"
           >
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Plus className="h-5 w-5 text-primary" />
@@ -304,6 +307,7 @@ export default function Dashboard() {
             variant="outline"
             className="h-auto py-4 flex flex-col gap-2"
             onClick={() => navigate("/join-sang")}
+            data-tour="join-sang-btn"
           >
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Users className="h-5 w-5 text-primary" />
