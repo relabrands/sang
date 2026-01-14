@@ -385,16 +385,39 @@ export default function SANGDetail() {
               <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
                 <Calendar className="h-5 w-5 text-primary mt-0.5" />
                 <div>
-                  <p className="font-semibold text-sm">Próximo Pago: {(() => {
-                    const d = new Date(sang.startDate);
-                    const turns = sang.currentTurn - 1;
-                    if (sang.frequency === 'weekly') d.setDate(d.getDate() + (turns * 7));
-                    if (sang.frequency === 'biweekly') d.setDate(d.getDate() + (turns * 14));
-                    if (sang.frequency === 'monthly') d.setMonth(d.getMonth() + turns);
-                    return d.toLocaleDateString("es-DO", { day: 'numeric', month: 'long', year: 'numeric' });
-                  })()}</p>
+                  <p className="font-semibold text-sm">
+                    {(() => {
+                      const allPaid = members.length > 0 && members.every(m => m.paymentStatus === 'paid');
+                      const isDelivered = sang.payoutStatus === 'paid_out';
+
+                      if (isDelivered) {
+                        return <span className="text-success flex items-center gap-1">
+                          <Check className="h-4 w-4" /> Entregado a {currentMemberTurn?.name || "Miembro"}
+                        </span>;
+                      }
+
+                      if (allPaid) {
+                        return <span className="text-primary flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" /> Esperando entrega a {currentMemberTurn?.name || "Miembro"}
+                        </span>;
+                      }
+
+                      // Default: Show Date
+                      const d = new Date(sang.startDate);
+                      const turns = sang.currentTurn - 1;
+                      if (sang.frequency === 'weekly') d.setDate(d.getDate() + (turns * 7));
+                      if (sang.frequency === 'biweekly') d.setDate(d.getDate() + (turns * 14));
+                      if (sang.frequency === 'monthly') d.setMonth(d.getMonth() + turns);
+                      return `Próximo Pago: ${d.toLocaleDateString("es-DO", { day: 'numeric', month: 'long', year: 'numeric' })}`;
+                    })()}
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Realiza tu pago antes de la fecha para mantener tu <span className="text-primary font-medium">Reputación al 100%</span>.
+                    {sang.payoutStatus === 'paid_out'
+                      ? "El ciclo de este turno ha sido completado."
+                      : members.every(m => m.paymentStatus === 'paid')
+                        ? "Todos han pagado. El organizador debe confirmar la entrega."
+                        : "Realiza tu pago antes de la fecha para mantener tu Reputación al 100%."
+                    }
                   </p>
                 </div>
               </div>
