@@ -67,31 +67,15 @@ export function NotificationPopover() {
             if (checked) {
                 const permission = await Notification.requestPermission();
                 if (permission === 'granted') {
-                    // Use env var
+                    // Use env var as requested
                     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-                    console.log("VAPID Key loaded:", vapidKey ? `Present (${vapidKey.substring(0, 5)}...)` : "Missing");
 
                     if (!vapidKey) {
-                        toast({ variant: "destructive", title: "Error de configuración", description: "Falta la clave VAPID en variables de entorno." });
+                        toast({ variant: "destructive", title: "Error de configuración", description: "Falta la clave VAPID." });
                         return;
                     }
 
-                    // Explicitly register service worker to ensure scope is correct
-                    let registration;
-                    try {
-                        registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-                        console.log("Service Worker registered with scope:", registration.scope);
-                    } catch (swError) {
-                        console.error("SW Registration failed", swError);
-                        // Fallback to auto-register if manual fails
-                    }
-
-                    const token = await getToken(messaging, {
-                        vapidKey,
-                        serviceWorkerRegistration: registration
-                    });
-
-                    console.log("FCM Token obtained:", token ? "Yes" : "No");
+                    const token = await getToken(messaging, { vapidKey });
 
                     if (token) {
                         await updateDoc(doc(db, "users", currentUser.uid), { fcmToken: token });
