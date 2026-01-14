@@ -67,8 +67,9 @@ export function NotificationPopover() {
             if (checked) {
                 const permission = await Notification.requestPermission();
                 if (permission === 'granted') {
-                    // Check if VAPID key is available
+                    // Use env var as requested
                     const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
                     if (!vapidKey) {
                         toast({ variant: "destructive", title: "Error de configuración", description: "Falta la clave VAPID." });
                         return;
