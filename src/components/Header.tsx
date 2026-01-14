@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationPopover } from "@/components/Notifications/NotificationPopover";
 
 interface HeaderProps {
   user?: {
@@ -45,16 +46,7 @@ export function Header({ user, onLogout }: HeaderProps) {
         </button>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative"
-            data-tour="header-notifications"
-            onClick={() => navigate("/notifications")}
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </Button>
+          <NotificationPopover />
 
           {user && (
             <DropdownMenu>

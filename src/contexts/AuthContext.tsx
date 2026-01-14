@@ -15,6 +15,7 @@ interface UserProfile {
     accountNumber?: string;
     cedula?: string;
     tutorialSeen?: boolean;
+    fcmToken?: string | null;
 }
 
 interface AuthContextType {
