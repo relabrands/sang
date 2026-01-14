@@ -1,4 +1,4 @@
-const functions = require("firebase-functions");
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -27,11 +27,6 @@ exports.processSignUp = functions.auth.user().onCreate(async (user) => {
                 fullName: user.displayName || "Usuario Nuevo"
             });
         }
-
-        // Send Welcome Email
-        await sendEmail(user.email, 'welcome_email', {
-            memberName: user.displayName || "Nuevo Usuario"
-        });
 
     } catch (error) {
         console.error(error);
@@ -290,5 +285,19 @@ exports.onSangUpdate = functions.firestore
             } catch (error) {
                 console.error("Error sending payout notification:", error);
             }
+        }
+    });
+
+// 6. On User Created (Firestore) -> Send Welcome Email
+// Triggers when the frontend writes to users/{userId}
+exports.onUserCreate = functions.firestore
+    .document("users/{userId}")
+    .onCreate(async (snap, context) => {
+        const userData = snap.data();
+
+        if (userData.email) {
+            await sendEmail(userData.email, 'welcome_email', {
+                memberName: userData.fullName || userData.displayName || "Nuevo Usuario"
+            });
         }
     });
