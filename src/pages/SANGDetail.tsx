@@ -31,6 +31,7 @@ export default function SANGDetail() {
   const { currentUser, userProfile } = useAuth();
 
   const [sang, setSang] = useState<SANG | null>(null);
+  const [organizer, setOrganizer] = useState<any>(null);
   const [members, setMembers] = useState<SANGMember[]>([]);
   const [pendingMembers, setPendingMembers] = useState<SANGMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,14 +55,28 @@ export default function SANGDetail() {
           ...data,
           startDate: data.startDate?.toDate ? data.startDate.toDate() : new Date(data.startDate)
         } as SANG);
+        if (data.organizerId) fetchOrganizer(data.organizerId);
       } else {
         toast({ variant: "destructive", title: "Error", description: "SANG no encontrado" });
         navigate("/sangs");
       }
       setLoading(false);
+      setLoading(false);
     });
 
-    // 2. Listen to Members Collection
+    // 2. Fetch Organizer Details (Bank Info)
+    const fetchOrganizer = async (organizerId: string) => {
+      try {
+        const orgSnap = await getDoc(doc(db, "users", organizerId));
+        if (orgSnap.exists()) {
+          setOrganizer(orgSnap.data());
+        }
+      } catch (e) {
+        console.error("Error fetching organizer", e);
+      }
+    }
+
+    // 3. Listen to Members Collection
     const qMembers = query(collection(db, `sangs/${id}/members`));
     const unsubMembers = onSnapshot(qMembers, (snapshot) => {
       const active: SANGMember[] = [];
@@ -398,6 +413,40 @@ export default function SANGDetail() {
               </Button>
             </div>
           </div>)}
+
+          {/* Organizer Bank Details (Visible to Members) */}
+          {!isOrganizer && organizer && (
+            <div className="mt-4 p-4 border border-border rounded-xl bg-card">
+              <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-primary" />
+                Datos para Transferencia (Organizador)
+              </h3>
+              <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Banco</p>
+                  <p className="font-medium">{organizer.bankName || "No especificado"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tipo</p>
+                  <p className="font-medium">{organizer.accountType || "-"}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground mb-1">Número de Cuenta - {organizer.fullName}</p>
+                  <div className="flex items-center justify-between bg-muted/50 p-2 rounded border border-border/50">
+                    <p className="font-mono font-bold tracking-wider">{organizer.accountNumber || "No disponible"}</p>
+                    {organizer.accountNumber && (
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => {
+                        navigator.clipboard.writeText(organizer.accountNumber);
+                        toast({ title: "Copiado", description: "Número de cuenta copiado." });
+                      }}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isOrganizer && sang.status === 'pending' && (
             <Button
