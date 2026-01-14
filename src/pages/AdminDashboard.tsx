@@ -20,6 +20,13 @@ import {
   X,
   Trash2
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/Header";
 import { DashboardCard } from "@/components/DashboardCard";
@@ -282,7 +289,6 @@ export default function AdminDashboard() {
             { value: "users", label: "Usuarios" },
             { value: "sangs", label: "SANGs" },
             { value: "payments", label: "Pagos" },
-            { value: "notifications", label: "Notificaciones" },
             { value: "templates", label: "Plantillas" },
           ].map((tab) => (
             <Button
@@ -740,6 +746,54 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+      {/* Broadcast Modal */}
+      <Dialog open={showBroadcast} onOpenChange={setShowBroadcast}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Notificación Push</DialogTitle>
+            <DialogDescription>Mensaje a todos los usuarios de la app</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Título</label>
+              <input
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Ej: Nuevo SANG disponible"
+                value={notifTitle}
+                onChange={(e) => setNotifTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Mensaje</label>
+              <textarea
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                placeholder="Escribe el contenido de la notificación..."
+                value={notifBody}
+                onChange={(e) => setNotifBody(e.target.value)}
+              />
+            </div>
+
+            <Button
+              className="w-full gap-2"
+              onClick={async () => {
+                await handleSendBroadcast();
+                setShowBroadcast(false);
+              }}
+              disabled={sendingNotif || !notifTitle || !notifBody}
+            >
+              {sendingNotif ? (
+                "Enviando..."
+              ) : (
+                <>
+                  <Send className="h-4 w-4" /> Enviar Broadcast
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* User Details Modal */}
       {selectedUser && (
         <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
