@@ -28,6 +28,11 @@ exports.processSignUp = functions.auth.user().onCreate(async (user) => {
             });
         }
 
+        // Send Welcome Email
+        await sendEmail(user.email, 'welcome_email', {
+            memberName: user.displayName || "Nuevo Usuario"
+        });
+
     } catch (error) {
         console.error(error);
     }
