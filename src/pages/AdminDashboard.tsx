@@ -17,7 +17,8 @@ import {
   Plus,
   Edit,
   Save,
-  X
+  X,
+  Trash2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Header } from "@/components/Header";
@@ -28,9 +29,9 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { auth, db, functions } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import { cn } from "@/lib/utils";
 import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot, setDoc, doc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -160,6 +161,22 @@ export default function AdminDashboard() {
   const getInitials = (name: string) => {
     return name ? name.split(" ").map((n) => n[0]).join("").toUpperCase() : "U";
   };
+
+  const handleResetDatabase = async () => {
+    if (!confirm("⚠️ ¡ADVERTENCIA! ⚠️\n\n¿Estás seguro de que deseas resetear la base de datos?\n\nEsta acción:\n1. Eliminará TODOS los SANGs.\n2. Eliminará TODOS los usuarios (excepto a ti).\n3. Eliminará todas las cuentas de autenticación.\n\nNO HAY VUELTA ATRÁS.")) {
+      return;
+    }
+
+    try {
+      const resetFn = httpsCallable(functions, 'resetDatabase');
+      await resetFn();
+      toast({ title: "Éxito", description: "Base de datos reseteada correctamente." });
+      // Refresh handled by listeners but good to force clear if needed
+    } catch (error: any) {
+      console.error("Error resetting database:", error);
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    }
+  }
 
   const handleSendBroadcast = async () => {
     if (!notifTitle.trim() || !notifBody.trim()) {
@@ -592,6 +609,14 @@ export default function AdminDashboard() {
                     </h2>
                   </div>
                   <div className="flex gap-2">
+                    <Button variant="destructive" onClick={handleResetDatabase} className="gap-2">
+                      <Trash2 className="h-4 w-4" />
+                      Reset DB
+                    </Button>
+                    <Button onClick={() => setShowBroadcast(true)} className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
+                      <Bell className="h-4 w-4" />
+                      Nueva Notificación
+                    </Button>
                     <Button variant="outline" onClick={() => setPreviewTemplate(editingTemplate)}>
                       <Eye className="h-4 w-4 mr-2" />
                       Previsualizar
