@@ -59,6 +59,21 @@ export function NotificationPopover() {
         return () => unsubscribe();
     }, [currentUser]);
 
+    // Listen for foreground messages
+    useEffect(() => {
+        import("firebase/messaging").then(({ onMessage }) => {
+            onMessage(messaging, (payload) => {
+                console.log("Foreground message received:", payload);
+                toast({
+                    title: payload.notification?.title || "Nueva notificación",
+                    description: payload.notification?.body,
+                    duration: 5000,
+                });
+                // Optionally refresh notifications or let Firestore snapshot handle it
+            });
+        });
+    }, [toast]);
+
     const handleToggle = async (checked: boolean) => {
         if (!currentUser) return;
         setLoading(true);
