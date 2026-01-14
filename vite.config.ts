@@ -36,7 +36,9 @@ export default defineConfig(({ mode }) => ({
             sizes: '512x512',
             type: 'image/png'
           },
-        ]
+        ],
+        start_url: '/',
+        scope: '/',
       }
     })
   ].filter(Boolean),
