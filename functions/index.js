@@ -111,7 +111,7 @@ exports.sendBroadcast = functions.https.onCall(async (data, context) => {
                 notification: { title, body },
                 tokens: chunk
             };
-            const response = await admin.messaging().sendMulticast(message);
+            const response = await admin.messaging().sendEachForMulticast(message);
             successCount += response.successCount;
             failureCount += response.failureCount;
         }
