@@ -35,7 +35,7 @@ export function NotificationPopover() {
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
-        if (Notification.permission === "granted" && userProfile?.fcmToken) {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === "granted" && userProfile?.fcmToken) {
             setEnabled(true);
         }
     }, [userProfile]);
@@ -61,22 +61,38 @@ export function NotificationPopover() {
 
     // Listen for foreground messages
     useEffect(() => {
-        import("firebase/messaging").then(({ onMessage }) => {
-            onMessage(messaging, (payload) => {
-                console.log("Foreground message received:", payload);
-                toast({
-                    title: payload.notification?.title || "Nueva notificación",
-                    description: payload.notification?.body,
-                    duration: 5000,
-                });
-                // Optionally refresh notifications or let Firestore snapshot handle it
+        if (typeof window !== 'undefined' && 'Notification' in window && messaging) {
+            import("firebase/messaging").then(({ onMessage }) => {
+                try {
+                    onMessage(messaging, (payload) => {
+                        console.log("Foreground message received:", payload);
+                        toast({
+                            title: payload.notification?.title || "Nueva notificación",
+                            description: payload.notification?.body,
+                            duration: 5000,
+                        });
+                    });
+                } catch (e) {
+                    console.log("Push notifications not supported in this context");
+                }
             });
-        });
+        }
     }, [toast]);
 
     const handleToggle = async (checked: boolean) => {
         if (!currentUser) return;
         setLoading(true);
+
+        // Safety check for API support
+        if (typeof window === 'undefined' || !('Notification' in window)) {
+            toast({ variant: "destructive", title: "No soportado", description: "Tu navegador no soporta notificaciones." });
+            return;
+        }
+
+        if (!messaging) {
+            toast({ variant: "destructive", title: "Error", description: "Servicio de mensajería no disponible." });
+            return;
+        }
 
         try {
             if (checked) {
