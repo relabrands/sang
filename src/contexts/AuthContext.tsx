@@ -59,9 +59,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     createdAt: new Date()
                 });
 
-                // Allow UI to render immediately
-                setLoading(false);
-
                 // 2. Fetch detailed profile in background for updates (reputation, etc.)
                 try {
                     const docSnap = await getDoc(doc(db, "users", user.uid));
@@ -75,24 +72,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     }
 
                     // 3. Setup Push Notifications (Progressive Enhancement)
-                    // We dynamically import to avoid breaking if messaging isn't supported
                     const { messaging } = await import("@/lib/firebase");
                     if (messaging) {
-                        const { getToken } = await import("firebase/messaging");
-                        const permission = await Notification.requestPermission();
-                        if (permission === "granted") {
-                            // Use default VAPID key (from firebase config) or generated one
-                            const token = await getToken(messaging, {
-                                vapidKey: "BMw5yVz_example_key_if_needed_otherwise_omit"
-                            }).catch(() => null);
+                        try {
+                            const { getToken } = await import("firebase/messaging");
+                            // Ensure environment is supported before requesting permission
+                            if ('Notification' in window) {
+                                const permission = await Notification.requestPermission();
+                                if (permission === "granted") {
+                                    const token = await getToken(messaging, {
+                                        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
+                                    }).catch(() => null);
 
-                            if (token) {
-                                await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+                                    if (token) {
+                                        await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
+                                    }
+                                }
                             }
-                        }
+                        } catch (e) { console.log('Push setup error', e) }
                     }
+
                 } catch (err) {
                     console.error("Profile/Notification error", err);
+                } finally {
+                    setLoading(false);
                 }
             } else {
                 setUserProfile(null);

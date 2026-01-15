@@ -82,18 +82,21 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
     ];
 
+    const [hasChecked, setHasChecked] = useState(false);
+
     // Check if tutorial has been seen, but only on mobile
     useEffect(() => {
         const isDesktop = window.innerWidth > 768; // Simple breakpoint for mobile vs desktop
 
-        if (userProfile && !userProfile.tutorialSeen && !run && !showModal && !isDesktop) {
+        if (userProfile && !userProfile.tutorialSeen && !run && !showModal && !isDesktop && !hasChecked) {
             // Small delay to ensure UI is ready
             const timer = setTimeout(() => {
                 setShowModal(true);
+                setHasChecked(true); // Ensure we don't check again in this session
             }, 1000);
             return () => clearTimeout(timer);
         }
-    }, [userProfile?.tutorialSeen, run, showModal]); // Fix: only depend on tutorialSeen specifically to avoid deep object cycle re-triggers
+    }, [userProfile?.tutorialSeen, run, showModal, hasChecked]);
 
     const markComplete = async () => {
         if (currentUser) {
