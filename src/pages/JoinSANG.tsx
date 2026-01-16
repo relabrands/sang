@@ -389,21 +389,21 @@ export default function JoinSANG() {
                         onValueChange={(v) => setSelectedShare(parseFloat(v))}
                         className="grid grid-cols-2 gap-3"
                       >
-                        <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedShare === 1 ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                          <RadioGroupItem value="1" className="sr-only" />
+                        <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${!canFull ? 'opacity-50 cursor-not-allowed border-dashed bg-muted' : 'cursor-pointer'} ${selectedShare === 1 && canFull ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                          <RadioGroupItem value="1" className="sr-only" disabled={!canFull} />
                           <Users className="h-5 w-5 text-primary" />
                           <div className="text-center">
                             <span className="block font-bold">Completo</span>
-                            <span className="text-xs text-muted-foreground">100% Cuota</span>
+                            <span className="text-xs text-muted-foreground">{canFull ? "100% Cuota" : "Cupos Llenos"}</span>
                           </div>
                         </label>
 
-                        <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${!canJoinHalf ? 'opacity-50 cursor-not-allowed border-dashed' : 'cursor-pointer'} ${selectedShare === 0.5 ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                          <RadioGroupItem value="0.5" className="sr-only" disabled={!canJoinHalf} />
+                        <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${!canHalf ? 'opacity-50 cursor-not-allowed border-dashed bg-muted' : 'cursor-pointer'} ${selectedShare === 0.5 && canHalf ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                          <RadioGroupItem value="0.5" className="sr-only" disabled={!canHalf} />
                           <Divide className="h-5 w-5 text-primary" />
                           <div className="text-center">
                             <span className="block font-bold">Medio</span>
-                            <span className="text-xs text-muted-foreground">{canJoinHalf ? "50% Cuota" : "Cupos Llenos"}</span>
+                            <span className="text-xs text-muted-foreground">{canHalf ? "50% Cuota" : "Cupos Llenos"}</span>
                           </div>
                         </label>
                       </RadioGroup>

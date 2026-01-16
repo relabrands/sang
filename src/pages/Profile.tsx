@@ -521,7 +521,7 @@ export default function Profile() {
       <BottomNav />
 
       {/* Floating Action Buttons for Edit/Save */}
-      <div className="fixed bottom-24 right-6 z-50 flex flex-col gap-3">
+      <div className="fixed bottom-24 left-6 z-50 flex flex-col gap-3">
         {!isEditing ? (
           <Button
             size="icon"
