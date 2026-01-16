@@ -472,18 +472,28 @@ export default function SANGDetail() {
             </div>
           )}
 
-          {sang.status === 'pending' && (<div className="mt-4 p-3 bg-accent rounded-xl flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground">Código de invitación</p>
-              <p className="font-mono font-bold text-lg">{sang.inviteCode}</p>
+          {sang.status === 'pending' && (
+            <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-primary">Invita a tus amigos</p>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleShareLink}>
+                    <Share2 className="h-3 w-3 mr-1" /> Compartir Link
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleCopyCode}>
+                    <Copy className="h-3 w-3 mr-1" /> Copiar Código
+                  </Button>
+                </div>
+              </div>
+              <div className="bg-background border border-border rounded-lg p-3 flex items-center justify-between">
+                <code className="text-lg font-bold tracking-wider">{sang.inviteCode}</code>
+                <span className="text-xs text-muted-foreground hidden sm:inline">Usa este código al unirte</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Comparte este código o el enlace directo para que tus amigos se unan a este SANG.
+              </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={handleCopyCode}>
-                <Copy className="h-4 w-4 mr-2" />
-                Copiar
-              </Button>
-            </div>
-          </div>)}
+          )}
 
           {/* Organizer Bank Details (Visible to Members) */}
           {!isOrganizer && organizer && (
@@ -611,18 +621,50 @@ export default function SANGDetail() {
                 {sang.payoutStatus !== 'paid_out' ? (
                   <div className="flex items-center justify-between gap-4">
                     <div className="text-primary-foreground/90 text-xs">
-                      <p className="font-semibold mb-0.5">Administrar Turno</p>
-                      <p>Confirma cuando hayas entregado el dinero a {currentMemberTurn?.name.split(" ")[0] || "Miembro"}.</p>
+                      {(() => {
+                        // Check if all members in THIS turn have paid
+                        const turnMembers = members.filter(m => m.turnNumber === sang.currentTurn);
+                        // If no members (shouldn't happen in active), treat as false
+                        const paidCount = turnMembers.filter(m => m.paymentStatus === 'paid').length;
+                        const totalNeeded = turnMembers.length;
+                        const allPaid = totalNeeded > 0 && paidCount === totalNeeded;
+
+                        if (!allPaid) {
+                          return (
+                            <div>
+                              <p className="font-semibold mb-0.5 opacity-90">Recolección en Proceso</p>
+                              <p className="opacity-75">Esperando que todos los miembros paguen ({paidCount}/{totalNeeded}).</p>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div>
+                            <p className="font-semibold mb-0.5">Dinero Recolectado 💰</p>
+                            <p>Todos han pagado. Confirma la entrega a {currentMemberTurn?.name.split(" ")[0] || "Miembro"}.</p>
+                          </div>
+                        )
+                      })()}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="whitespace-nowrap shadow-sm"
-                      onClick={() => payoutFileInputRef.current?.click()}
-                      disabled={uploading}
-                    >
-                      {uploading ? "Subiendo..." : "Subir Comprobante y Entregar"}
-                    </Button>
+
+                    {(() => {
+                      const turnMembers = members.filter(m => m.turnNumber === sang.currentTurn);
+                      const allPaid = turnMembers.length > 0 && turnMembers.every(m => m.paymentStatus === 'paid');
+
+                      if (!allPaid) return null; // Hide button if not ready
+
+                      return (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="whitespace-nowrap shadow-sm animate-pulse-subtle"
+                          onClick={() => payoutFileInputRef.current?.click()}
+                          disabled={uploading}
+                        >
+                          {uploading ? "Subiendo..." : "Subir Comprobante y Entregar"}
+                        </Button>
+                      )
+                    })()}
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-4">
@@ -707,12 +749,19 @@ export default function SANGDetail() {
                     <span className="text-xs font-bold text-primary tracking-wider uppercase">
                       Turno #{turnNum}
                     </span>
-                    <span className={cn(
-                      "text-xs font-bold px-2 py-0.5 rounded-full",
-                      totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                    )}>
-                      {totalShares >= 1 ? "Completo" : "1/2 Ocupado"}
-                    </span>
+                    <div className="flex gap-2">
+                      {turnMembers.some(m => m.sharePercentage === 0.5) && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
+                          <Users className="h-3 w-3" /> Compartido
+                        </span>
+                      )}
+                      <span className={cn(
+                        "text-xs font-bold px-2 py-0.5 rounded-full",
+                        totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                      )}>
+                        {totalShares >= 1 ? "Completo" : "1/2 Ocupado"}
+                      </span>
+                    </div>
                   </div>
 
                   {/* List members in this turn */}

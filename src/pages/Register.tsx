@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,7 +50,12 @@ export default function Register() {
         description: "Tu cuenta ha sido creada exitosamente.",
       });
       // New users are always 'user' role by default in this flow, so straight to dashboard
-      navigate("/dashboard");
+      const redirectUrl = searchParams.get("redirect");
+      if (redirectUrl) {
+        navigate(decodeURIComponent(redirectUrl));
+      } else {
+        navigate("/dashboard");
+      }
     } catch (error: any) {
       console.error("Error creating account:", error);
 
@@ -69,6 +75,9 @@ export default function Register() {
       setIsLoading(false);
     }
   };
+
+
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

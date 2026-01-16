@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { getDoc, doc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -13,14 +13,20 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { currentUser } = useAuth();
 
   useEffect(() => {
     if (currentUser) {
-      navigate("/dashboard");
+      const redirectUrl = searchParams.get("redirect");
+      if (redirectUrl) {
+        navigate(decodeURIComponent(redirectUrl));
+      } else {
+        navigate("/dashboard");
+      }
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, searchParams]);
 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -52,15 +58,21 @@ export default function Login() {
       if (isAdminInCollection || isAdminInProfile) {
         targetMeta = "/admin";
         // CRITICAL: Force refresh token to pick up new claims from Cloud Function
-        // This ensures AuthContext sees 'admin' role immediately
         await user.getIdToken(true);
       }
+
+      const redirectUrl = searchParams.get("redirect");
 
       toast({
         title: "¡Bienvenido de vuelta!",
         description: "Has iniciado sesión exitosamente.",
       });
-      navigate(targetMeta);
+
+      if (redirectUrl) {
+        navigate(decodeURIComponent(redirectUrl));
+      } else {
+        navigate(targetMeta);
+      }
     } catch (error: any) {
       console.error("Error logging in:", error);
       let errorMessage = "Error al iniciar sesión.";
