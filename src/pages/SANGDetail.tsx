@@ -478,22 +478,22 @@ export default function SANGDetail() {
 
           {sang.status !== 'completed' && (
             <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-xl">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                 <p className="text-sm font-semibold text-primary">Invita a tus amigos</p>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleShareLink}>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button variant="ghost" size="sm" className="flex-1 sm:flex-none h-8 text-xs bg-white/50 hover:bg-white" onClick={handleShareLink}>
                     <Share2 className="h-3 w-3 mr-1" /> Compartir Link
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleCopyCode}>
+                  <Button variant="ghost" size="sm" className="flex-1 sm:flex-none h-8 text-xs bg-white/50 hover:bg-white" onClick={handleCopyCode}>
                     <Copy className="h-3 w-3 mr-1" /> Copiar Código
                   </Button>
                 </div>
               </div>
-              <div className="bg-background border border-border rounded-lg p-3 flex items-center justify-between">
-                <code className="text-lg font-bold tracking-wider">{sang.inviteCode}</code>
-                <span className="text-xs text-muted-foreground hidden sm:inline">Usa este código al unirte</span>
+              <div className="bg-background border border-border rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
+                <code className="text-lg font-bold tracking-wider w-full sm:w-auto">{sang.inviteCode}</code>
+                <span className="text-xs text-muted-foreground">Usa este código al unirte</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground mt-2 text-center sm:text-left">
                 Comparte este código o el enlace directo para que tus amigos se unan a este SANG.
               </p>
             </div>

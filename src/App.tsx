@@ -20,6 +20,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
 import { TutorialProvider } from "@/components/Tutorial/TutorialProvider";
+import InviteHandler from "@/components/InviteHandler";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/invite/:code" element={<InviteHandler />} />
               <Route
                 path="/dashboard"
                 element={
