@@ -245,20 +245,7 @@ export default function Profile() {
         {/* Profile Header */}
         <div className="text-center mb-8 animate-fade-in relative">
           <div className="absolute right-0 top-0">
-            {!isEditing ? (
-              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
-                <Edit2 className="h-4 w-4 mr-1" /> Editar
-              </Button>
-            ) : (
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving}>
-                  <X className="h-4 w-4" />
-                </Button>
-                <Button variant="default" size="sm" onClick={handleSaveProfile} disabled={isSaving}>
-                  {isSaving ? "..." : <Save className="h-4 w-4" />}
-                </Button>
-              </div>
-            )}
+            {/* Old buttons removed - now using FAB */}
           </div>
 
           <Avatar className="h-24 w-24 mx-auto mb-4 ring-4 ring-accent">
@@ -532,6 +519,41 @@ export default function Profile() {
       </main>
 
       <BottomNav />
+
+      {/* Floating Action Buttons for Edit/Save */}
+      <div className="fixed bottom-24 right-6 z-50 flex flex-col gap-3">
+        {!isEditing ? (
+          <Button
+            size="icon"
+            className="h-14 w-14 rounded-full shadow-lg bg-primary text-white hover:bg-primary/90 hover:scale-105 transition-all"
+            onClick={() => setIsEditing(true)}
+          >
+            <Edit2 className="h-6 w-6" />
+          </Button>
+        ) : (
+          <>
+            <Button
+              size="icon"
+              variant="destructive"
+              className="h-12 w-12 rounded-full shadow-md opacity-90 hover:opacity-100 hover:scale-105 transition-all"
+              onClick={() => setIsEditing(false)}
+              disabled={isSaving}
+              title="Cancelar"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+            <Button
+              size="icon"
+              className="h-14 w-14 rounded-full shadow-lg bg-success text-white hover:bg-success/90 hover:scale-105 transition-all animate-bounce-subtle"
+              onClick={handleSaveProfile}
+              disabled={isSaving}
+              title="Guardar Cambios"
+            >
+              {isSaving ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Save className="h-6 w-6" />}
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
