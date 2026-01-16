@@ -121,12 +121,14 @@ export default function SANGDetail() {
 
   const handleShareLink = () => {
     if (!sang) return;
-    const shareText = `¡Únete a mi SANG "${sang.name}" en TodosPonen! Usa el código: ${sang.inviteCode}`;
+    const shareUrl = `${window.location.origin}/invite/${sang.inviteCode}`;
+    const shareText = `¡Únete a mi SANG "${sang.name}" en TodosPonen!`;
+
     if (navigator.share) {
-      navigator.share({ title: "Únete a mi SANG", text: shareText, url: window.location.href });
+      navigator.share({ title: "Únete a mi SANG", text: shareText, url: shareUrl });
     } else {
-      navigator.clipboard.writeText(`${shareText} ${window.location.href}`);
-      toast({ title: "Enlace copiado", description: "Compártelo con tus amigos" });
+      navigator.clipboard.writeText(`${shareText} ${shareUrl}`);
+      toast({ title: "Enlace copiado", description: "Enlace de invitación copiado al portapapeles." });
     }
   };
 
@@ -472,7 +474,7 @@ export default function SANGDetail() {
             </div>
           )}
 
-          {sang.status === 'pending' && (
+          {sang.status !== 'completed' && (
             <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-xl">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-semibold text-primary">Invita a tus amigos</p>
@@ -594,15 +596,27 @@ export default function SANGDetail() {
                     #{sang.currentTurn} - {currentMemberTurn.name}
                   </p>
                   {/* Status Badge inside Card */}
-                  {sang.payoutStatus === 'paid_out' ? (
-                    <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
-                      <Check className="h-3 w-3 mr-1" /> Entregado
-                    </span>
-                  ) : (
-                    <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
-                      Recolectando
-                    </span>
-                  )}
+                  {(() => {
+                    if (members.length < sang.numberOfParticipants) {
+                      return (
+                        <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center animate-pulse">
+                          Reclutando...
+                        </span>
+                      )
+                    }
+                    if (sang.payoutStatus === 'paid_out') {
+                      return (
+                        <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
+                          <Check className="h-3 w-3 mr-1" /> Entregado
+                        </span>
+                      )
+                    }
+                    return (
+                      <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
+                        Recolectando
+                      </span>
+                    )
+                  })()}
                 </div>
 
                 <p className="text-primary-foreground/70 text-sm mt-1">
@@ -626,14 +640,26 @@ export default function SANGDetail() {
                         const turnMembers = members.filter(m => m.turnNumber === sang.currentTurn);
                         // If no members (shouldn't happen in active), treat as false
                         const paidCount = turnMembers.filter(m => m.paymentStatus === 'paid').length;
-                        const totalNeeded = turnMembers.length;
-                        const allPaid = totalNeeded > 0 && paidCount === totalNeeded;
+                        const totalTurnMembers = turnMembers.length;
+                        const allPaid = totalTurnMembers > 0 && paidCount === totalTurnMembers;
+
+                        // NEW: Check if SANG is still filling up
+                        const isSangFull = members.length >= sang.numberOfParticipants;
+
+                        if (!isSangFull) {
+                          return (
+                            <div>
+                              <p className="font-semibold mb-0.5 opacity-90">SANG en Reclutamiento ⏳</p>
+                              <p className="opacity-75">Esperando que se completen todos los cupos ({members.length}/{sang.numberOfParticipants}).</p>
+                            </div>
+                          )
+                        }
 
                         if (!allPaid) {
                           return (
                             <div>
                               <p className="font-semibold mb-0.5 opacity-90">Recolección en Proceso</p>
-                              <p className="opacity-75">Esperando que todos los miembros paguen ({paidCount}/{totalNeeded}).</p>
+                              <p className="opacity-75">Esperando que todos los miembros paguen ({paidCount}/{totalTurnMembers}).</p>
                             </div>
                           )
                         }
