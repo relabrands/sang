@@ -671,161 +671,239 @@ export default function SANGDetail() {
         </div>
 
         {/* Timeline/Member List */}
-        <div className="space-y-3 animate-fade-in" data-tour="sang-turns">
-          {Array.from({ length: sang.numberOfParticipants }, (_, i) => i + 1).map((turnNum) => {
-            const turnMembers = members.filter(m => m.turnNumber === turnNum);
-            // Calculate Occupancy
-            const totalShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+        {/* Timeline View */}
+        {activeTab === "timeline" && (
+          <div className="space-y-3 animate-fade-in" data-tour="sang-turns">
+            {Array.from({ length: sang.numberOfParticipants }, (_, i) => i + 1).map((turnNum) => {
+              const turnMembers = members.filter(m => m.turnNumber === turnNum);
+              // Calculate Occupancy
+              const totalShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
 
-            // If empty (vacant turn)
-            if (turnMembers.length === 0) {
-              return (
-                <div key={turnNum} className="bg-card/50 border border-dashed border-border rounded-xl p-4 flex items-center justify-between opacity-70">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center font-bold text-muted-foreground border-2 border-border">
-                      {turnNum}
+              // If empty (vacant turn)
+              if (turnMembers.length === 0) {
+                return (
+                  <div key={turnNum} className="bg-card/50 border border-dashed border-border rounded-xl p-4 flex items-center justify-between opacity-70">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center font-bold text-muted-foreground border-2 border-border">
+                        {turnNum}
+                      </div>
+                      <p className="text-muted-foreground font-medium">Turno Disponible</p>
                     </div>
-                    <p className="text-muted-foreground font-medium">Turno Disponible</p>
                   </div>
+                );
+              }
+
+              // Render Turn Card
+              return (
+                <div
+                  key={turnNum}
+                  className={cn(
+                    "bg-card rounded-xl shadow-card flex flex-col transition-all overflow-hidden",
+                    sang.currentTurn === turnNum && sang.status === 'active' && "ring-2 ring-primary"
+                  )}
+                >
+                  {/* Turn Header Logic */}
+                  <div className="bg-muted/30 px-4 py-2 border-b border-border/50 flex justify-between items-center">
+                    <span className="text-xs font-bold text-primary tracking-wider uppercase">
+                      Turno #{turnNum}
+                    </span>
+                    <span className={cn(
+                      "text-xs font-bold px-2 py-0.5 rounded-full",
+                      totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                    )}>
+                      {totalShares >= 1 ? "Completo" : "1/2 Ocupado"}
+                    </span>
+                  </div>
+
+                  {/* List members in this turn */}
+                  {turnMembers.map((member, idx) => {
+                    const isMe = currentUser && member.userId === currentUser.uid;
+                    const paymentStatus = member.paymentStatus || 'pending';
+
+                    return (
+                      <div key={member.id} className={cn("p-4 flex flex-col gap-3", idx > 0 && "border-t border-border/50")}>
+                        <div className="flex items-center gap-4">
+                          <div className="relative">
+                            <Avatar className="h-12 w-12">
+                              <AvatarFallback className={cn("text-sm font-semibold bg-muted")}>
+                                {getInitials(member.name || "")}
+                              </AvatarFallback>
+                            </Avatar>
+                            {/* Number is redundant if header has it, but good for context if scrolling? Maybe keep clean */}
+                            {member.sharePercentage === 0.5 && (
+                              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold shadow-sm" title="Medio Número">
+                                1/2
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium truncate max-w-[150px]">{member.name || "Usuario"} {isMe && "(Tú)"}</p>
+                              {member.userId === sang.organizerId && (
+                                <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                  Admin
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              <span className={cn(
+                                "text-xs px-2 py-0.5 rounded-full capitalize",
+                                paymentStatus === 'paid' ? "bg-success/10 text-success" :
+                                  paymentStatus === 'reviewing' ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
+                              )}>
+                                {paymentStatus === 'paid' ? "Pagado" :
+                                  paymentStatus === 'reviewing' ? "Revisando" : "Pendiente"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2 gap-2">
+                          {/* Organizer: View Bank Details */}
+                          {isOrganizer && (
+                            <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleViewDetails(member.userId)}>
+                              <DollarSign className="h-3 w-3 mr-1" /> Ver Cuenta
+                            </Button>
+                          )}
+
+                          {/* Member Action: Upload Proof */}
+                          {isMe && paymentStatus !== 'paid' && paymentStatus !== 'reviewing' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2"
+                              onClick={() => triggerUpload(member.id)}
+                              disabled={uploading}
+                              data-tour="sang-payments"
+                            >
+                              {uploading && targetMemberId === member.id ? (
+                                <>Subiendo...</>
+                              ) : (
+                                <>
+                                  <Upload className="h-4 w-4" />
+                                  Subir
+                                </>
+                              )}
+                            </Button>
+                          )}
+
+                          {/* Organizer Action: View Proof */}
+                          {isOrganizer && member.paymentProofUrl && (
+                            <a href={member.paymentProofUrl} target="_blank" rel="noopener noreferrer">
+                              <Button size="sm" variant="ghost" className="gap-2">
+                                <ExternalLink className="h-4 w-4" />
+                                Ver Comprobante
+                              </Button>
+                            </a>
+                          )}
+
+                          {/* Organizer Action: Approve */}
+                          {isOrganizer && paymentStatus === 'reviewing' && (
+                            <Button size="sm" className="bg-success text-white hover:bg-success/90" onClick={() => handleApprovePayment(member.id)}>
+                              <Check className="h-4 w-4 mr-1" />
+                              Aprobar
+                            </Button>
+                          )}
+
+                          {/* Paid Indicator */}
+                          {paymentStatus === 'paid' && (
+                            <div className="flex items-center text-success text-sm font-medium">
+                              <Check className="h-4 w-4 mr-1" /> Listo
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Ghost/Placeholder Slot if 1/2 Available */}
+                  {turnMembers.length > 0 && totalShares < 1 && (
+                    <div className="p-4 border-t border-border/50 border-dashed bg-muted/10 opacity-60 flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center text-muted-foreground/50">
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Medio Cupo Disponible</p>
+                        <p className="text-xs text-muted-foreground/70">Esperando participante...</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
-            }
+            })}
+          </div>
+        )}
 
-            // Render Turn Card
-            return (
-              <div
-                key={turnNum}
-                className={cn(
-                  "bg-card rounded-xl shadow-card flex flex-col transition-all overflow-hidden",
-                  sang.currentTurn === turnNum && sang.status === 'active' && "ring-2 ring-primary"
-                )}
-              >
-                {/* Turn Header Logic */}
-                <div className="bg-muted/30 px-4 py-2 border-b border-border/50 flex justify-between items-center">
-                  <span className="text-xs font-bold text-primary tracking-wider uppercase">
-                    Turno #{turnNum}
-                  </span>
-                  <span className={cn(
-                    "text-xs font-bold px-2 py-0.5 rounded-full",
-                    totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                  )}>
-                    {totalShares >= 1 ? "Completo (2/2)" : "1/2 Ocupado"}
-                  </span>
-                </div>
+        {/* Member List View */}
+        {activeTab === "members" && (
+          <div className="space-y-3 animate-fade-in">
+            {members.map((member) => {
+              const paymentStatus = member.paymentStatus || 'pending';
+              const isMe = currentUser && member.userId === currentUser.uid;
 
-                {/* List members in this turn */}
-                {turnMembers.map((member, idx) => {
-                  const isMe = currentUser && member.userId === currentUser.uid;
-                  const paymentStatus = member.paymentStatus || 'pending';
+              // Find partner if half share
+              let partnerName = null;
+              if (member.sharePercentage === 0.5) {
+                const partner = members.find(m => m.turnNumber === member.turnNumber && m.id !== member.id);
+                partnerName = partner ? partner.name : null;
+              }
 
-                  return (
-                    <div key={member.id} className={cn("p-4 flex flex-col gap-3", idx > 0 && "border-t border-border/50")}>
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <Avatar className="h-12 w-12">
-                            <AvatarFallback className={cn("text-sm font-semibold bg-muted")}>
-                              {getInitials(member.name || "")}
-                            </AvatarFallback>
-                          </Avatar>
-                          {/* Only show circle number if single member or for first one to avoid clutter, or always? Let's show for all but maybe smaller implies split? */}
-                          {/* Actually, if it's the main rendering, keeping the number on avatar is fine */}
-                          {turnMembers.length === 1 && (
-                            <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-card border-2 border-border flex items-center justify-center text-xs font-bold">
-                              {member.turnNumber}
-                            </div>
-                          )}
-                          {member.sharePercentage === 0.5 && (
-                            <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold shadow-sm" title="Medio Número">
-                              1/2
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium truncate max-w-[150px]">{member.name || "Usuario"} {isMe && "(Tú)"}</p>
-                            {member.userId === sang.organizerId && (
-                              <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                                Admin
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            <span className={cn(
-                              "text-xs px-2 py-0.5 rounded-full capitalize",
-                              paymentStatus === 'paid' ? "bg-success/10 text-success" :
-                                paymentStatus === 'reviewing' ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
-                            )}>
-                              {paymentStatus === 'paid' ? "Pagado" :
-                                paymentStatus === 'reviewing' ? "Revisando" : "Pendiente"}
-                            </span>
-                          </div>
-                        </div>
+              return (
+                <div key={member.id} className="bg-card rounded-xl p-4 shadow-sm flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12">
+                        <AvatarFallback>{getInitials(member.name || "")}</AvatarFallback>
+                      </Avatar>
+                      <div className="absolute -top-2 -left-2 h-6 w-6 rounded-full bg-background border-2 border-muted flex items-center justify-center text-xs font-bold text-muted-foreground shadow-sm">
+                        {member.turnNumber}
                       </div>
+                      {member.sharePercentage === 0.5 && (
+                        <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold shadow-sm">
+                          1/2
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm flex items-center gap-2">
+                        {member.name || "Usuario"}
+                        {isMe && <span className="text-xs text-muted-foreground">(Tú)</span>}
+                      </p>
 
-                      <div className="flex justify-end pt-2 gap-2">
-                        {/* Organizer: View Bank Details */}
-                        {isOrganizer && (
-                          <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleViewDetails(member.userId)}>
-                            <DollarSign className="h-3 w-3 mr-1" /> Ver Cuenta
-                          </Button>
-                        )}
+                      {/* Shared Status Context */}
+                      {member.sharePercentage === 0.5 && (
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          {partnerName ? `Comparte con: ${partnerName}` : <span className="text-warning font-medium">Falta compañero</span>}
+                        </p>
+                      )}
 
-                        {/* Member Action: Upload Proof */}
-                        {isMe && paymentStatus !== 'paid' && paymentStatus !== 'reviewing' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-2"
-                            onClick={() => triggerUpload(member.id)}
-                            disabled={uploading}
-                            data-tour="sang-payments"
-                          >
-                            {uploading && targetMemberId === member.id ? (
-                              <>Subiendo...</>
-                            ) : (
-                              <>
-                                <Upload className="h-4 w-4" />
-                                Subir
-                              </>
-                            )}
-                          </Button>
-                        )}
-
-                        {/* Organizer Action: View Proof */}
-                        {isOrganizer && member.paymentProofUrl && (
-                          <a href={member.paymentProofUrl} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" variant="ghost" className="gap-2">
-                              <ExternalLink className="h-4 w-4" />
-                              Ver Comprobante
-                            </Button>
-                          </a>
-                        )}
-
-                        {/* Organizer Action: Approve */}
-                        {isOrganizer && paymentStatus === 'reviewing' && (
-                          <Button size="sm" className="bg-success text-white hover:bg-success/90" onClick={() => handleApprovePayment(member.id)}>
-                            <Check className="h-4 w-4 mr-1" />
-                            Aprobar
-                          </Button>
-                        )}
-
-                        {/* Paid Indicator */}
-                        {paymentStatus === 'paid' && (
-                          <div className="flex items-center text-success text-sm font-medium">
-                            <Check className="h-4 w-4 mr-1" /> Listo
-                          </div>
-                        )}
+                      <div className="mt-1">
+                        <span className={cn(
+                          "text-xs px-2 py-0.5 rounded-full capitalize inline-block",
+                          paymentStatus === 'paid' ? "bg-success/10 text-success" :
+                            paymentStatus === 'reviewing' ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
+                        )}>
+                          {paymentStatus === 'paid' ? "Pagado" :
+                            paymentStatus === 'reviewing' ? "Revisando" : "Pendiente"}
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+                  </div>
 
-          {members.length === 0 && <p className="text-center text-muted-foreground">Esperando miembros...</p>}
-        </div>
+                  {/* Quick Action Button? Maybe View Profile */}
+                  {isOrganizer && (
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => handleViewDetails(member.userId)}>
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+            {members.length === 0 && <p className="text-center text-muted-foreground py-8">No hay miembros aún.</p>}
+          </div>
+        )}
 
         {/* Member Details Modal */}
         <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
