@@ -60,31 +60,6 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             target: '[data-tour="nav-sangs"]',
             content: 'Aquí ves todos tus SANGs: Activos, Pendientes y Completados.',
             title: 'Tus SANGs',
-        },
-        // Note: These steps might be skipped if elements are not present (e.g., if user has no SANG)
-        // We can rely on Joyride to skip them if target not found, or handle navigation.
-        // For a robust onboarding, we usually need the elements to exist. 
-        // Since this is "First Login", these specific inner-SANG elements won't exist.
-        // However, adhering to the requested script:
-        {
-            target: '[data-tour="sang-turns"]',
-            content: 'Este es el orden de turnos. Tu número te dice cuándo te toca recibir.',
-            title: 'Turnos y Calendario',
-        },
-        {
-            target: '[data-tour="sang-payments"]',
-            content: 'Cuando te toque pagar, subes tu comprobante aquí y el organizador lo confirma.',
-            title: 'Pagos',
-        },
-        {
-            target: '[data-tour="profile-reputation"]',
-            content: 'Tu reputación se basa en pagos a tiempo. Mantenerla alta te ayuda a entrar a mejores SANGs.',
-            title: 'Reputación',
-        },
-        {
-            target: '[data-tour="header-notifications"]',
-            content: 'Te avisamos cuando te acepten, cuando confirmen tu pago y cuando sea tu turno.',
-            title: 'Notificaciones',
         }
     ];
 

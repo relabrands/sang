@@ -424,7 +424,7 @@ export default function CreateSANG() {
         </form>
       </main>
 
-      <BottomNav />
+      {/* BottomNav removed to prevent mobile keyboard glitches */}
     </div>
   );
 }
