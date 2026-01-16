@@ -23,7 +23,8 @@ export default function JoinSANG() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"enter" | "preview" | "success">("enter");
   const [sangPreview, setSangPreview] = useState<SANG & { organizerName: string } | null>(null);
-  const [selectedShare, setSelectedShare] = useState(1.0); // Default to full share
+  const [currentMembers, setCurrentMembers] = useState<any[]>([]); // To check limits
+  const [selectedShare, setSelectedShare] = useState(1.0);
 
   // Auto-trigger search if code came from URL
   useEffect(() => {
@@ -78,6 +79,11 @@ export default function JoinSANG() {
         }
       }
 
+      // Fetch Members for Limit Checking
+      const membersSnap = await getDocs(collection(db, `sangs/${sangData.id}/members`));
+      const members = membersSnap.docs.map(d => d.data());
+      setCurrentMembers(members);
+
       setSangPreview({ ...sangData, organizerName });
       setStep("preview");
     } catch (error) {
@@ -94,6 +100,8 @@ export default function JoinSANG() {
 
   const handleJoin = async () => {
     if (!currentUser || !sangPreview) return;
+    // ... rest of handleJoin
+
 
     // Check for Bank Info
     if (!userProfile?.bankName || !userProfile?.accountNumber || !userProfile?.cedula) {
@@ -278,28 +286,56 @@ export default function JoinSANG() {
               {sangPreview.allowHalfShares && (
                 <div className="space-y-3 p-4 bg-muted/50 rounded-xl border border-border">
                   <Label className="text-base font-semibold">Tipo de Participación</Label>
-                  <RadioGroup
-                    value={selectedShare.toString()}
-                    onValueChange={(v) => setSelectedShare(parseFloat(v))}
-                    className="grid grid-cols-2 gap-3"
-                  >
-                    <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedShare === 1 ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <RadioGroupItem value="1" className="sr-only" />
-                      <Users className="h-5 w-5 text-primary" />
-                      <div className="text-center">
-                        <span className="block font-bold">Completo</span>
-                        <span className="text-xs text-muted-foreground">100% Cuota</span>
-                      </div>
-                    </label>
-                    <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedShare === 0.5 ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <RadioGroupItem value="0.5" className="sr-only" />
-                      <Divide className="h-5 w-5 text-primary" />
-                      <div className="text-center">
-                        <span className="block font-bold">Medio</span>
-                        <span className="text-xs text-muted-foreground">50% Cuota</span>
-                      </div>
-                    </label>
-                  </RadioGroup>
+                  {(() => {
+                    // Logic to check limits
+                    // 1. Open Half Slots: Turns with exactly ONE 0.5 member
+                    // 2. New Half Slots: Turns with ZERO members, if we haven't reached maxHalfShares
+
+                    const halfMembers = currentMembers.filter(m => m.sharePercentage === 0.5);
+
+                    // Count unique turns already using 'Half'
+                    // Note: If data model doesn't strictly enforce turnNumber on creation (0 means unassigned), 
+                    // we might need to rely on just count.
+                    // But usually, limits are about "how many splits allowed".
+
+                    // Simple logic:
+                    // Max Halves setting = "Number of Split Turns".
+                    // Current Split Turns = count(turns where exists a 0.5 member)
+
+                    // BUT for joining, users often have turnNumber = 0 (unassigned).
+                    // So we must count how many 0.5 users exist globally.
+                    // Each split turn holds 2 users. So Max Users = maxHalfShares * 2.
+                    const halfUserCount = halfMembers.length;
+                    const maxHalfUsers = (sangPreview.maxHalfShares || 0) * 2;
+
+                    const canJoinHalf = halfUserCount < maxHalfUsers;
+
+                    return (
+                      <RadioGroup
+                        value={selectedShare.toString()}
+                        onValueChange={(v) => setSelectedShare(parseFloat(v))}
+                        className="grid grid-cols-2 gap-3"
+                      >
+                        <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedShare === 1 ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                          <RadioGroupItem value="1" className="sr-only" />
+                          <Users className="h-5 w-5 text-primary" />
+                          <div className="text-center">
+                            <span className="block font-bold">Completo</span>
+                            <span className="text-xs text-muted-foreground">100% Cuota</span>
+                          </div>
+                        </label>
+
+                        <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${!canJoinHalf ? 'opacity-50 cursor-not-allowed border-dashed' : 'cursor-pointer'} ${selectedShare === 0.5 ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                          <RadioGroupItem value="0.5" className="sr-only" disabled={!canJoinHalf} />
+                          <Divide className="h-5 w-5 text-primary" />
+                          <div className="text-center">
+                            <span className="block font-bold">Medio</span>
+                            <span className="text-xs text-muted-foreground">{canJoinHalf ? "50% Cuota" : "Cupos Llenos"}</span>
+                          </div>
+                        </label>
+                      </RadioGroup>
+                    );
+                  })()}
                   <div className="text-center text-sm">
                     Pagarás: <span className="font-bold text-primary">RD$ {(sangPreview.contributionAmount * selectedShare).toLocaleString()}</span>
                   </div>

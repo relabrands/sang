@@ -41,6 +41,7 @@ export interface SANG {
   payoutStatus?: 'collecting' | 'paid_out';
   lastPayoutProofUrl?: string;
   allowHalfShares?: boolean;
+  maxHalfShares?: number;
 }
 
 export interface SANGMember {

@@ -47,10 +47,13 @@ export default function CreateSANG() {
     numberOfParticipants: "",
     startDate: "",
     turnAssignment: "random" as TurnAssignment,
-    allowHalfShares: false, // NEW
+    allowHalfShares: false,
+    maxHalfShares: "", // NEW: string for input handling, converted to number on submit
   });
 
-  const nextStep = () => setStep(step + 1);
+  const nextStep = () => {
+    if (isStepValid()) setStep(step + 1);
+  };
   const prevStep = () => setStep(step - 1);
 
   // PROACTIVE CHECK: Enforce Bank Info
@@ -74,7 +77,14 @@ export default function CreateSANG() {
       case 2:
         return form.contributionAmount && parseInt(form.contributionAmount) >= 100;
       case 3:
-        return form.numberOfParticipants && parseInt(form.numberOfParticipants) >= 2;
+        if (!form.numberOfParticipants || parseInt(form.numberOfParticipants) < 2) return false;
+        // Validate maxHalfShares if enabled
+        if (form.allowHalfShares) {
+          if (!form.maxHalfShares) return false;
+          const max = parseInt(form.maxHalfShares);
+          if (isNaN(max) || max <= 0 || max > (parseInt(form.numberOfParticipants) * 2)) return false;
+        }
+        return true;
       case 4:
         return form.startDate;
       default:
@@ -82,15 +92,7 @@ export default function CreateSANG() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Protection: If not on step 5, just go to next step
-    if (step !== 5) {
-      if (isStepValid()) nextStep();
-      return;
-    }
-
+  const handleCreateSANG = async () => {
     if (!currentUser) return;
 
     // Check for Bank Info
@@ -115,7 +117,8 @@ export default function CreateSANG() {
         numberOfParticipants: parseInt(form.numberOfParticipants),
         startDate: new Date(form.startDate),
         turnAssignment: form.turnAssignment,
-        allowHalfShares: form.allowHalfShares, // NEW
+        allowHalfShares: form.allowHalfShares,
+        maxHalfShares: form.allowHalfShares ? parseInt(form.maxHalfShares) : 0, // NEW
         organizerId: currentUser.uid,
         status: "active",
         inviteCode: inviteCode,
@@ -135,7 +138,7 @@ export default function CreateSANG() {
         joinedAt: serverTimestamp(),
         role: "organizer",
         name: userProfile?.fullName || "Organizador",
-        sharePercentage: 1.0, // Organizer is full member by default usually
+        sharePercentage: 1.0,
       });
 
       toast({
@@ -186,7 +189,8 @@ export default function CreateSANG() {
           ))}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 animate-slide-up">
+        {/* Replaced <form> with <div> to prevent auto-submit behavior */}
+        <div className="space-y-6 animate-slide-up">
           {/* Step 1: Name */}
           {step === 1 && (
             <div className="space-y-4">
@@ -292,20 +296,49 @@ export default function CreateSANG() {
               </div>
 
               {/* Allow Half Shares Toggle */}
-              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
-                <div className="space-y-0.5">
-                  <Label className="text-base flex items-center gap-2">
-                    <Divide className="h-4 w-4 text-primary" />
-                    Permitir Medios Números
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Dos personas pueden compartir un turno (50% c/u)
-                  </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
+                  <div className="space-y-0.5">
+                    <Label className="text-base flex items-center gap-2">
+                      <Divide className="h-4 w-4 text-primary" />
+                      Permitir Medios Números
+                    </Label>
+                    <p className="text-sm text-muted-foreground mr-2">
+                      Dos personas pueden compartir un turno (50% c/u)
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.allowHalfShares}
+                    onCheckedChange={(checked) => setForm({
+                      ...form,
+                      allowHalfShares: checked,
+                      // Reset max if disabled, or set default if enabled
+                      maxHalfShares: checked ? (form.numberOfParticipants ? (parseInt(form.numberOfParticipants)).toString() : "4") : ""
+                    })}
+                  />
                 </div>
-                <Switch
-                  checked={form.allowHalfShares}
-                  onCheckedChange={(checked) => setForm({ ...form, allowHalfShares: checked })}
-                />
+
+                {/* Max Half Shares Input */}
+                {form.allowHalfShares && (
+                  <div className="animate-slide-up space-y-2 p-4 bg-muted/50 rounded-xl border border-border">
+                    <Label htmlFor="maxHalfShares" className="text-sm font-medium">Turnos que permiten 'Medio Número'</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="maxHalfShares"
+                        type="number"
+                        placeholder="Ej: 2"
+                        value={form.maxHalfShares}
+                        onChange={(e) => setForm({ ...form, maxHalfShares: e.target.value })}
+                        className="bg-background"
+                        min={1}
+                        max={form.numberOfParticipants ? parseInt(form.numberOfParticipants) : 50}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Define cuántos cupos del SANG pueden ser divididos.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {form.contributionAmount && form.numberOfParticipants && (
@@ -395,7 +428,7 @@ export default function CreateSANG() {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Medios Números</span>
-                  <span className="font-medium">{form.allowHalfShares ? "Permitidos" : "No"}</span>
+                  <span className="font-medium">{form.allowHalfShares ? `Sí (Máx: ${form.maxHalfShares})` : "No"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Inicio</span>
@@ -436,17 +469,18 @@ export default function CreateSANG() {
               </Button>
             ) : (
               <Button
-                type="submit"
+                type="button" // CHANGED FROM "submit" to "button" to use onClick explicitly
                 variant="hero"
                 size="lg"
                 className="w-full"
                 disabled={isLoading}
+                onClick={handleCreateSANG}
               >
                 {isLoading ? "Creando SANG..." : "Crear SANG"}
               </Button>
             )}
           </div>
-        </form>
+        </div>
       </main>
 
       {/* BottomNav removed to prevent mobile keyboard glitches */}

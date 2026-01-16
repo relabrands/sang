@@ -674,6 +674,8 @@ export default function SANGDetail() {
         <div className="space-y-3 animate-fade-in" data-tour="sang-turns">
           {Array.from({ length: sang.numberOfParticipants }, (_, i) => i + 1).map((turnNum) => {
             const turnMembers = members.filter(m => m.turnNumber === turnNum);
+            // Calculate Occupancy
+            const totalShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
 
             // If empty (vacant turn)
             if (turnMembers.length === 0) {
@@ -689,7 +691,7 @@ export default function SANGDetail() {
               );
             }
 
-            // Render Turn Card (Supports 1 or multiple members)
+            // Render Turn Card
             return (
               <div
                 key={turnNum}
@@ -698,12 +700,18 @@ export default function SANGDetail() {
                   sang.currentTurn === turnNum && sang.status === 'active' && "ring-2 ring-primary"
                 )}
               >
-                {/* Turn Header if split or just cleaner design */}
-                {turnMembers.length > 1 && (
-                  <div className="bg-muted/30 px-4 py-2 border-b border-border/50 flex justify-between items-center">
-                    <span className="text-xs font-bold text-primary tracking-wider uppercase">Turno #{turnNum} - Compartido</span>
-                  </div>
-                )}
+                {/* Turn Header Logic */}
+                <div className="bg-muted/30 px-4 py-2 border-b border-border/50 flex justify-between items-center">
+                  <span className="text-xs font-bold text-primary tracking-wider uppercase">
+                    Turno #{turnNum}
+                  </span>
+                  <span className={cn(
+                    "text-xs font-bold px-2 py-0.5 rounded-full",
+                    totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                  )}>
+                    {totalShares >= 1 ? "Completo (2/2)" : "1/2 Ocupado"}
+                  </span>
+                </div>
 
                 {/* List members in this turn */}
                 {turnMembers.map((member, idx) => {
