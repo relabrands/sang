@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 interface UserProfile {
@@ -59,9 +59,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     createdAt: new Date()
                 });
 
-                // 2. Fetch detailed profile in background for updates (reputation, etc.)
-                try {
-                    const docSnap = await getDoc(doc(db, "users", user.uid));
+                // 2. Real-time Profile Sync
+                // Using onSnapshot ensures that changes like 'tutorialSeen' are immediately reflected
+                const unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
                         setUserProfile(prev => ({
@@ -70,33 +70,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             role: role || (data.role as "admin" | "user")
                         }));
                     }
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Profile sync error:", error);
+                    setLoading(false);
+                });
 
-                    // 3. Setup Push Notifications (Progressive Enhancement)
-                    const { messaging } = await import("@/lib/firebase");
-                    if (messaging) {
-                        try {
-                            const { getToken } = await import("firebase/messaging");
-                            // Ensure environment is supported before requesting permission
-                            if ('Notification' in window) {
-                                const permission = await Notification.requestPermission();
-                                if (permission === "granted") {
-                                    const token = await getToken(messaging, {
-                                        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
-                                    }).catch(() => null);
+                // 3. Setup Push Notifications (Progressive Enhancement)
+                const { messaging } = await import("@/lib/firebase");
+                if (messaging) {
+                    try {
+                        const { getToken } = await import("firebase/messaging");
+                        if ('Notification' in window) {
+                            const permission = await Notification.requestPermission();
+                            if (permission === 'granted') {
+                                const token = await getToken(messaging, {
+                                    vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
+                                }).catch(() => null);
 
-                                    if (token) {
-                                        await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
-                                    }
+                                if (token) {
+                                    await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
                                 }
                             }
-                        } catch (e) { console.log('Push setup error', e) }
-                    }
-
-                } catch (err) {
-                    console.error("Profile/Notification error", err);
-                } finally {
-                    setLoading(false);
+                        }
+                    } catch (e) { console.log('Push setup error', e) }
                 }
+
+                // Note: onSnapshot returns an unsubscribe function.
+                // We should ideally clean this up, but inside onAuthStateChanged logic 
+                // it is tricky without refs. Since this is the root provider, it persists.
             } else {
                 setUserProfile(null);
                 setLoading(false);

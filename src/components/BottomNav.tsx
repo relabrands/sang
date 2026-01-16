@@ -30,7 +30,7 @@ export function BottomNav() {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              data-tour={item.path === '/sangs' ? 'nav-sangs' : undefined}
+              data-tour={item.path === '/sangs' ? 'nav-sangs' : (item.path === '/profile' ? 'nav-profile' : undefined)}
               className={cn(
                 "flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-200",
                 isActive

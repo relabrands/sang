@@ -146,14 +146,14 @@ export default function Dashboard() {
         // Process final SANGs structure
         const finalSangs = fetchedSangs.map(s => ({
           ...s,
-          startDate: s.startDate?.toDate ? s.startDate.toDate() : new Date(s.startDate),
-          createdAt: s.createdAt?.toDate ? s.createdAt.toDate() : new Date(),
+          startDate: s.startDate?.toDate ? s.startDate.toDate() : (s.startDate ? new Date(s.startDate) : new Date()),
+          createdAt: s.createdAt?.toDate ? s.createdAt.toDate() : (s.createdAt ? new Date(s.createdAt) : new Date()),
         })) as SANG[];
 
         finalSangs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
         // Sort upcoming payments by date
-        upcoming.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
+        upcoming.sort((a, b) => (a.dueDate ? a.dueDate.getTime() : 0) - (b.dueDate ? b.dueDate.getTime() : 0));
 
         setSangs(finalSangs);
         setPendingRequests(pending);

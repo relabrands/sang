@@ -42,7 +42,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         },
         {
             target: '[data-tour="create-sang-btn"]',
-            content: 'Crea un SANG para tu familia, amigos o compañeros. Tú defines monto, turnos y frecuencia.',
+            content: '¡Organiza tu propio SANG! Elige el monto, frecuencia (semanal/quincenal) y cantidad de personas. Tú tienes el control.',
             title: 'Crear SANG',
         },
         {
@@ -50,6 +50,12 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             content: 'Si te invitaron, coloca el código aquí y envías tu solicitud.',
             title: 'Unirme a SANG',
         },
+        // Conditional Step: Bank Info (If pending)
+        ...(userProfile && (!userProfile.bankName || !userProfile.accountNumber) ? [{
+            target: '[data-tour="nav-profile"]',
+            content: 'Para recibir pagos como organizador, recuerda completar tu Información Bancaria en tu Perfil.',
+            title: 'Configura tu Banco',
+        }] : []),
         {
             target: '[data-tour="nav-sangs"]',
             content: 'Aquí ves todos tus SANGs: Activos, Pendientes y Completados.',
