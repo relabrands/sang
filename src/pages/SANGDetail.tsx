@@ -587,107 +587,116 @@ export default function SANGDetail() {
           </div>
         )}
 
-        {/* Current Turn Highlight */}
-        {sang.status === 'active' && currentMemberTurn && (
+        {/* Current Turn Highlight & Status Card */}
+        {(sang.status === 'active' || (sang.status === 'pending' && sang.turnAssignment === 'random')) && (
           <div className="gradient-primary rounded-2xl p-5 mb-6 animate-slide-up" style={{ animationDelay: "100ms" }}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-primary-foreground/80 text-sm">Turno Actual</p>
+                <p className="text-primary-foreground/80 text-sm">Estado Actual</p>
                 <div className="flex items-center gap-2">
-                  <p className="text-primary-foreground text-2xl font-bold">
-                    #{sang.currentTurn} - {currentMemberTurn.name}
+                  <p className="text-primary-foreground text-xl md:text-2xl font-bold">
+                    {sang.turnAssignment === 'random' && sang.status === 'pending'
+                      ? "Reclutando..."
+                      : `Turno #${sang.currentTurn} - ${currentMemberTurn?.name || "..."}`}
                   </p>
-                  {/* Status Badge inside Card */}
-                  {(() => {
-                    const totalOccupiedShares = members.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
-                    if (totalOccupiedShares < sang.numberOfParticipants) {
-                      return (
-                        <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center animate-pulse">
-                          Reclutando...
-                        </span>
-                      )
-                    }
-                    if (sang.payoutStatus === 'paid_out') {
-                      return (
-                        <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
-                          <Check className="h-3 w-3 mr-1" /> Entregado
-                        </span>
-                      )
-                    }
-                    return (
-                      <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center">
-                        Recolectando
-                      </span>
-                    )
-                  })()}
                 </div>
 
                 <p className="text-primary-foreground/70 text-sm mt-1">
-                  Recibe RD$ {(sang.contributionAmount * sang.numberOfParticipants).toLocaleString()}
+                  {sang.turnAssignment === 'random' && sang.status === 'pending'
+                    ? "Los turnos se asignarán al llenarse."
+                    : `Recibe RD$ ${(sang.contributionAmount * sang.numberOfParticipants).toLocaleString()}`
+                  }
                 </p>
               </div>
 
               <div className="h-16 w-16 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
-                <span className="text-primary-foreground text-2xl font-bold">{sang.currentTurn}</span>
+                {sang.turnAssignment === 'random' && sang.status === 'pending' ? (
+                  <Calendar className="h-8 w-8 text-primary-foreground" />
+                ) : (
+                  <span className="text-primary-foreground text-2xl font-bold">{sang.currentTurn}</span>
+                )}
               </div>
             </div>
 
-            {/* Organizer Payout Action */}
-            {isOrganizer && (
-              <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm">
-                {sang.payoutStatus !== 'paid_out' ? (
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-primary-foreground/90 text-xs">
-                      {(() => {
-                        // Check if all members in THIS turn have paid
-                        const turnMembers = members.filter(m => m.turnNumber === sang.currentTurn);
-                        // If no members (shouldn't happen in active), treat as false
-                        const paidCount = turnMembers.filter(m => m.paymentStatus === 'paid').length;
-                        const totalTurnMembers = turnMembers.length;
-                        const allPaid = totalTurnMembers > 0 && paidCount === totalTurnMembers;
+            {/* Universal Status Message (Visible to ALL) */}
+            <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm mb-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="text-primary-foreground/90 text-sm">
+                  {(() => {
+                    const totalOccupiedShares = members.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+                    const isSangFull = totalOccupiedShares >= sang.numberOfParticipants;
 
-                        // NEW: Check if SANG is still filling up
-                        const totalOccupiedShares = members.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
-                        const isSangFull = totalOccupiedShares >= sang.numberOfParticipants;
+                    // 1. Recruiting Phase
+                    if (!isSangFull) {
+                      return (
+                        <div>
+                          <p className="font-bold mb-0.5 flex items-center gap-2">
+                            SANG en Reclutamiento ⏳
+                          </p>
+                          <p className="opacity-90 text-xs">
+                            Faltan {(sang.numberOfParticipants - totalOccupiedShares)} cupos para iniciar.
+                            ({totalOccupiedShares}/{sang.numberOfParticipants})
+                          </p>
+                        </div>
+                      )
+                    }
 
-                        if (!isSangFull) {
-                          return (
-                            <div>
-                              <p className="font-semibold mb-0.5 opacity-90">SANG en Reclutamiento ⏳</p>
-                              <p className="opacity-75">Esperando que se completen todos los cupos ({totalOccupiedShares}/{sang.numberOfParticipants}).</p>
-                            </div>
-                          )
-                        }
+                    // 2. Collection Phase (Only if Active)
+                    if (sang.status === 'active') {
+                      const turnMembers = members.filter(m => m.turnNumber === sang.currentTurn);
+                      const paidCount = turnMembers.filter(m => m.paymentStatus === 'paid').length;
+                      const totalTurnMembers = turnMembers.length;
+                      const allPaid = totalTurnMembers > 0 && paidCount === totalTurnMembers;
 
-                        if (!allPaid) {
-                          return (
-                            <div>
-                              <p className="font-semibold mb-0.5 opacity-90">Recolección en Proceso</p>
-                              <p className="opacity-75">Esperando que todos los miembros paguen ({paidCount}/{totalTurnMembers}).</p>
-                            </div>
-                          )
-                        }
-
+                      if (!allPaid) {
                         return (
                           <div>
-                            <p className="font-semibold mb-0.5">Dinero Recolectado 💰</p>
-                            <p>Todos han pagado. Confirma la entrega a {currentMemberTurn?.name.split(" ")[0] || "Miembro"}.</p>
+                            <p className="font-bold mb-0.5">Recolección en Proceso 💸</p>
+                            <p className="opacity-90 text-xs">Esperando pagos ({paidCount}/{totalTurnMembers}).</p>
                           </div>
                         )
-                      })()}
-                    </div>
+                      }
 
+                      if (sang.payoutStatus !== 'paid_out') {
+                        return (
+                          <div>
+                            <p className="font-bold mb-0.5">Dinero Recolectado 💰</p>
+                            <p className="opacity-90 text-xs">Listo para entregar a {currentMemberTurn?.name.split(" ")[0]}.</p>
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <div>
+                          <p className="font-bold mb-0.5">Turno Completado ✅</p>
+                          <p className="opacity-90 text-xs">Dinero entregado exitosamente.</p>
+                        </div>
+                      )
+                    }
+
+                    return <p>Esperando inicio...</p>;
+                  })()}
+                </div>
+              </div>
+            </div>
+
+
+            {/* Organizer Actions (Payout / Next Turn) - ONLY IF ACTIVE */}
+            {isOrganizer && sang.status === 'active' && (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                {sang.payoutStatus !== 'paid_out' ? (
+                  <div className="flex justify-end">
                     {(() => {
                       const turnMembers = members.filter(m => m.turnNumber === sang.currentTurn);
                       const allPaid = turnMembers.length > 0 && turnMembers.every(m => m.paymentStatus === 'paid');
 
-                      if (!allPaid) return null; // Hide button if not ready
+                      if (!allPaid) return <span className="text-xs text-primary-foreground/50 italic">Esperando pagos para habilitar entrega...</span>;
 
                       return (
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="whitespace-nowrap shadow-sm animate-pulse-subtle"
+                          className="whitespace-nowrap shadow-sm animate-pulse-subtle w-full sm:w-auto"
                           onClick={() => payoutFileInputRef.current?.click()}
                           disabled={uploading}
                         >
@@ -697,14 +706,10 @@ export default function SANGDetail() {
                     })()}
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-primary-foreground/90 text-xs">
-                      <p className="font-semibold mb-0.5">Turno Completado</p>
-                      <p>El dinero fue entregado. ¿Listo para el siguiente?</p>
-                    </div>
+                  <div className="flex justify-end">
                     <Button
                       size="sm"
-                      className="bg-white text-primary hover:bg-white/90 whitespace-nowrap shadow-sm font-bold"
+                      className="bg-white text-primary hover:bg-white/90 whitespace-nowrap shadow-sm font-bold w-full sm:w-auto"
                       onClick={handleNextTurn}
                     >
                       {sang.currentTurn >= sang.numberOfParticipants ? "Finalizar SANG" : "Iniciar Siguiente Turno"}
@@ -714,8 +719,9 @@ export default function SANGDetail() {
                 )}
               </div>
             )}
+
             {/* Legend/Info for Members */}
-            {!isOrganizer && (
+            {!isOrganizer && sang.status === 'active' && (
               <p className="text-primary-foreground/60 text-xs mt-2 flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" />
                 El organizador confirmará cuando el dinero sea entregado.
@@ -746,171 +752,199 @@ export default function SANGDetail() {
         {/* Timeline View */}
         {activeTab === "timeline" && (
           <div className="space-y-3 animate-fade-in" data-tour="sang-turns">
-            {Array.from({ length: sang.numberOfParticipants }, (_, i) => i + 1).map((turnNum) => {
-              const turnMembers = members.filter(m => m.turnNumber === turnNum);
-              // Calculate Occupancy
-              const totalShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+            {/* RANDOM MODE & PENDING: Show List, not Timeline */}
+            {sang.turnAssignment === 'random' && sang.status === 'pending' ? (
+              <div className="space-y-3">
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center mb-2">
+                  <Shuffle className="h-6 w-6 text-primary mx-auto mb-2" />
+                  <p className="font-bold text-primary">Asignación Aleatoria Pendiente</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Los turnos se definirán automáticamente cuando el SANG esté completo.
+                    <br />
+                    Orden actual de llegada:
+                  </p>
+                </div>
 
-              // If empty (vacant turn)
-              if (turnMembers.length === 0) {
-                return (
-                  <div key={turnNum} className="bg-card/50 border border-dashed border-border rounded-xl p-4 flex items-center justify-between opacity-70">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center font-bold text-muted-foreground border-2 border-border">
-                        {turnNum}
+                {members.map((member, i) => (
+                  <div key={member.id} className="bg-card rounded-xl p-3 shadow-sm flex items-center gap-3 opacity-90">
+                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                      ?
+                    </div>
+                    <p className="font-medium text-sm">{member.name} {currentUser?.uid === member.userId && "(Tú)"}</p>
+                  </div>
+                ))}
+
+                {members.length === 0 && (
+                  <p className="text-center text-muted-foreground text-sm py-4">Aún no hay participantes.</p>
+                )}
+              </div>
+            ) : (
+              // NORMAL TIMELINE MODE
+              Array.from({ length: sang.numberOfParticipants }, (_, i) => i + 1).map((turnNum) => {
+                const turnMembers = members.filter(m => m.turnNumber === turnNum);
+                // Calculate Occupancy
+                const totalShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+
+                // If empty (vacant turn)
+                if (turnMembers.length === 0) {
+                  return (
+                    <div key={turnNum} className="bg-card/50 border border-dashed border-border rounded-xl p-4 flex items-center justify-between opacity-70">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center font-bold text-muted-foreground border-2 border-border">
+                          {turnNum}
+                        </div>
+                        <p className="text-muted-foreground font-medium">Turno Disponible</p>
                       </div>
-                      <p className="text-muted-foreground font-medium">Turno Disponible</p>
                     </div>
-                  </div>
-                );
-              }
+                  );
+                }
 
-              // Render Turn Card
-              return (
-                <div
-                  key={turnNum}
-                  className={cn(
-                    "bg-card rounded-xl shadow-card flex flex-col transition-all overflow-hidden",
-                    sang.currentTurn === turnNum && sang.status === 'active' && "ring-2 ring-primary"
-                  )}
-                >
-                  {/* Turn Header Logic */}
-                  <div className="bg-muted/30 px-4 py-2 border-b border-border/50 flex justify-between items-center">
-                    <span className="text-xs font-bold text-primary tracking-wider uppercase">
-                      Turno #{turnNum}
-                    </span>
-                    <div className="flex gap-2">
-                      {turnMembers.some(m => m.sharePercentage === 0.5) && (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
-                          <Users className="h-3 w-3" /> Compartido
-                        </span>
-                      )}
-                      <span className={cn(
-                        "text-xs font-bold px-2 py-0.5 rounded-full",
-                        totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                      )}>
-                        {totalShares >= 1 ? "Completo" : "1/2 Ocupado"}
+                // Render Turn Card
+                return (
+                  <div
+                    key={turnNum}
+                    className={cn(
+                      "bg-card rounded-xl shadow-card flex flex-col transition-all overflow-hidden",
+                      sang.currentTurn === turnNum && sang.status === 'active' && "ring-2 ring-primary"
+                    )}
+                  >
+                    {/* Turn Header Logic */}
+                    <div className="bg-muted/30 px-4 py-2 border-b border-border/50 flex justify-between items-center">
+                      <span className="text-xs font-bold text-primary tracking-wider uppercase">
+                        Turno #{turnNum}
                       </span>
+                      <div className="flex gap-2">
+                        {turnMembers.some(m => m.sharePercentage === 0.5) && (
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
+                            <Users className="h-3 w-3" /> Compartido
+                          </span>
+                        )}
+                        <span className={cn(
+                          "text-xs font-bold px-2 py-0.5 rounded-full",
+                          totalShares >= 1 ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
+                        )}>
+                          {totalShares >= 1 ? "Completo" : "1/2 Ocupado"}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* List members in this turn */}
-                  {turnMembers.map((member, idx) => {
-                    const isMe = currentUser && member.userId === currentUser.uid;
-                    const paymentStatus = member.paymentStatus || 'pending';
+                    {/* List members in this turn */}
+                    {turnMembers.map((member, idx) => {
+                      const isMe = currentUser && member.userId === currentUser.uid;
+                      const paymentStatus = member.paymentStatus || 'pending';
 
-                    return (
-                      <div key={member.id} className={cn("p-4 flex flex-col gap-3", idx > 0 && "border-t border-border/50")}>
-                        <div className="flex items-center gap-4">
-                          <div className="relative">
-                            <Avatar className="h-12 w-12">
-                              <AvatarFallback className={cn("text-sm font-semibold bg-muted")}>
-                                {getInitials(member.name || "")}
-                              </AvatarFallback>
-                            </Avatar>
-                            {/* Number is redundant if header has it, but good for context if scrolling? Maybe keep clean */}
-                            {member.sharePercentage === 0.5 && (
-                              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold shadow-sm" title="Medio Número">
-                                1/2
+                      return (
+                        <div key={member.id} className={cn("p-4 flex flex-col gap-3", idx > 0 && "border-t border-border/50")}>
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <Avatar className="h-12 w-12">
+                                <AvatarFallback className={cn("text-sm font-semibold bg-muted")}>
+                                  {getInitials(member.name || "")}
+                                </AvatarFallback>
+                              </Avatar>
+                              {/* Number is redundant if header has it, but good for context if scrolling? Maybe keep clean */}
+                              {member.sharePercentage === 0.5 && (
+                                <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold shadow-sm" title="Medio Número">
+                                  1/2
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate max-w-[150px]">{member.name || "Usuario"} {isMe && "(Tú)"}</p>
+                                {member.userId === sang.organizerId && (
+                                  <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                    Admin
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                <span className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full capitalize",
+                                  paymentStatus === 'paid' ? "bg-success/10 text-success" :
+                                    paymentStatus === 'reviewing' ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
+                                )}>
+                                  {paymentStatus === 'paid' ? "Pagado" :
+                                    paymentStatus === 'reviewing' ? "Revisando" : "Pendiente"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end pt-2 gap-2">
+                            {/* Organizer: View Bank Details */}
+                            {isOrganizer && (
+                              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleViewDetails(member.userId)}>
+                                <DollarSign className="h-3 w-3 mr-1" /> Ver Cuenta
+                              </Button>
+                            )}
+
+                            {/* Member Action: Upload Proof */}
+                            {isMe && paymentStatus !== 'paid' && paymentStatus !== 'reviewing' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-2"
+                                onClick={() => triggerUpload(member.id)}
+                                disabled={uploading}
+                                data-tour="sang-payments"
+                              >
+                                {uploading && targetMemberId === member.id ? (
+                                  <>Subiendo...</>
+                                ) : (
+                                  <>
+                                    <Upload className="h-4 w-4" />
+                                    Subir
+                                  </>
+                                )}
+                              </Button>
+                            )}
+
+                            {/* Organizer Action: View Proof */}
+                            {isOrganizer && member.paymentProofUrl && (
+                              <a href={member.paymentProofUrl} target="_blank" rel="noopener noreferrer">
+                                <Button size="sm" variant="ghost" className="gap-2">
+                                  <ExternalLink className="h-4 w-4" />
+                                  Ver Comprobante
+                                </Button>
+                              </a>
+                            )}
+
+                            {/* Organizer Action: Approve */}
+                            {isOrganizer && paymentStatus === 'reviewing' && (
+                              <Button size="sm" className="bg-success text-white hover:bg-success/90" onClick={() => handleApprovePayment(member.id)}>
+                                <Check className="h-4 w-4 mr-1" />
+                                Aprobar
+                              </Button>
+                            )}
+
+                            {/* Paid Indicator */}
+                            {paymentStatus === 'paid' && (
+                              <div className="flex items-center text-success text-sm font-medium">
+                                <Check className="h-4 w-4 mr-1" /> Listo
                               </div>
                             )}
                           </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium truncate max-w-[150px]">{member.name || "Usuario"} {isMe && "(Tú)"}</p>
-                              {member.userId === sang.organizerId && (
-                                <span className="text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                                  Admin
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 mt-1">
-                              <span className={cn(
-                                "text-xs px-2 py-0.5 rounded-full capitalize",
-                                paymentStatus === 'paid' ? "bg-success/10 text-success" :
-                                  paymentStatus === 'reviewing' ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
-                              )}>
-                                {paymentStatus === 'paid' ? "Pagado" :
-                                  paymentStatus === 'reviewing' ? "Revisando" : "Pendiente"}
-                              </span>
-                            </div>
-                          </div>
                         </div>
+                      );
+                    })}
 
-                        <div className="flex justify-end pt-2 gap-2">
-                          {/* Organizer: View Bank Details */}
-                          {isOrganizer && (
-                            <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => handleViewDetails(member.userId)}>
-                              <DollarSign className="h-3 w-3 mr-1" /> Ver Cuenta
-                            </Button>
-                          )}
-
-                          {/* Member Action: Upload Proof */}
-                          {isMe && paymentStatus !== 'paid' && paymentStatus !== 'reviewing' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2"
-                              onClick={() => triggerUpload(member.id)}
-                              disabled={uploading}
-                              data-tour="sang-payments"
-                            >
-                              {uploading && targetMemberId === member.id ? (
-                                <>Subiendo...</>
-                              ) : (
-                                <>
-                                  <Upload className="h-4 w-4" />
-                                  Subir
-                                </>
-                              )}
-                            </Button>
-                          )}
-
-                          {/* Organizer Action: View Proof */}
-                          {isOrganizer && member.paymentProofUrl && (
-                            <a href={member.paymentProofUrl} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm" variant="ghost" className="gap-2">
-                                <ExternalLink className="h-4 w-4" />
-                                Ver Comprobante
-                              </Button>
-                            </a>
-                          )}
-
-                          {/* Organizer Action: Approve */}
-                          {isOrganizer && paymentStatus === 'reviewing' && (
-                            <Button size="sm" className="bg-success text-white hover:bg-success/90" onClick={() => handleApprovePayment(member.id)}>
-                              <Check className="h-4 w-4 mr-1" />
-                              Aprobar
-                            </Button>
-                          )}
-
-                          {/* Paid Indicator */}
-                          {paymentStatus === 'paid' && (
-                            <div className="flex items-center text-success text-sm font-medium">
-                              <Check className="h-4 w-4 mr-1" /> Listo
-                            </div>
-                          )}
+                    {/* Half Share Placeholder */}
+                    {turnMembers.length > 0 && totalShares < 1 && (
+                      <div className="p-4 border-t border-border/50 border-dashed bg-primary/5 flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center text-primary/60">
+                          <span className="text-xs font-bold">1/2</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-primary">¡Medio Cupo Disponible!</p>
+                          <p className="text-xs text-muted-foreground">Esperando compañero...</p>
                         </div>
                       </div>
-                    );
-                  })}
-
-                  {/* Ghost/Placeholder Slot if 1/2 Available */}
-                  {turnMembers.length > 0 && totalShares < 1 && (
-                    <div className="p-4 border-t border-border/50 border-dashed bg-muted/10 opacity-60 flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center text-muted-foreground/50">
-                        <Users className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-muted-foreground">Medio Cupo Disponible</p>
-                        <p className="text-xs text-muted-foreground/70">Esperando participante...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </div>
+                );
+              }))}
           </div>
         )}
 
