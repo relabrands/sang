@@ -15,7 +15,7 @@ export default function InviteHandler() {
             // User is logged in, redirect to Join Page with code
             // We assume /join takes a query param, e.g. /join?code=XYZ
             // Or we can implement auto-join if we want, but letting them review is safer.
-            navigate(`/join?code=${code}`);
+            navigate(`/join-sang?code=${code}`);
         } else {
             // User not logged in, redirect to Register with return URL
             // We encode the return path so after auth they come back here
