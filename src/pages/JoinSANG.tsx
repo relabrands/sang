@@ -22,7 +22,7 @@ export default function JoinSANG() {
 
   const [inviteCode, setInviteCode] = useState(searchParams.get("code") || "");
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<"enter" | "preview" | "success">("enter");
+  const [step, setStep] = useState<"enter" | "preview" | "success" | "already_joined">("enter");
   const [sangPreview, setSangPreview] = useState<SANG & { organizerName: string } | null>(null);
   const [currentMembers, setCurrentMembers] = useState<any[]>([]); // To check limits
   const [selectedShare, setSelectedShare] = useState(1.0);
@@ -79,6 +79,15 @@ export default function JoinSANG() {
       const membersData = membersSnapshot.docs.map(d => d.data());
       setCurrentMembers(membersData);
 
+      // 4. Check if user is already a member
+      const existingMember = membersData.find((m: any) => m.userId === currentUser?.uid);
+      if (existingMember && (existingMember.status === 'approved' || existingMember.status === 'active' || existingMember.status === 'pending')) {
+        setSangPreview({ ...sangData, organizerName }); // Needed for ID in redirection
+        setStep("already_joined");
+        setIsLoading(false);
+        return;
+      }
+
       setSangPreview({ ...sangData, organizerName });
       setStep("preview");
     } catch (error) {
@@ -97,7 +106,8 @@ export default function JoinSANG() {
     if (!currentUser || !sangPreview) return;
 
     // Validation
-    if (!form.turnNumber) {
+    const isRandom = sangPreview.turnAssignment === 'random';
+    if (!isRandom && !form.turnNumber) {
       toast({ variant: "destructive", title: "Turno Requerido", description: "Por favor selecciona un turno." });
       return;
     }
@@ -122,7 +132,7 @@ export default function JoinSANG() {
       await setDoc(doc(db, `sangs/${sangPreview.id}/members`, currentUser.uid), {
         userId: currentUser.uid,
         sangId: sangPreview.id,
-        turnNumber: form.turnNumber, // SAVE SELECTED TURN
+        turnNumber: isRandom ? 0 : form.turnNumber, // 0 if Random
         status: "pending",
         joinedAt: serverTimestamp(),
         name: memberName,
@@ -145,6 +155,45 @@ export default function JoinSANG() {
       setIsLoading(false);
     }
   };
+
+  // --- LOGIC FOR AVAILABILITY ---
+  const getAvailability = () => {
+    if (!sangPreview) return { canFull: false, canHalf: false, emptyTurns: [], halfTurns: [] };
+
+    const totalTurns = sangPreview.numberOfParticipants;
+    const emptyTurnsIds: number[] = [];
+    const halfTurnsIds: number[] = [];
+
+    for (let i = 1; i <= totalTurns; i++) {
+      const turnMembers = currentMembers.filter(m => m.turnNumber === i);
+      const occupied = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+
+      if (occupied === 0) emptyTurnsIds.push(i);
+      else if (occupied === 0.5) halfTurnsIds.push(i);
+    }
+
+    const limitHalves = sangPreview.maxHalfShares || 0;
+    // Count turns that ALREADY have at least one 0.5 member
+    const turnsWithHalves = new Set(currentMembers.filter(m => m.sharePercentage === 0.5).map(m => m.turnNumber)).size;
+
+    const canCreateNewSplit = turnsWithHalves < limitHalves;
+
+    const canSelectFull = emptyTurnsIds.length > 0;
+    // Can Select Half IF: (There is an existing half slot to fill) OR (There is an empty slot AND we can create a new split)
+    const canSelectHalf = (halfTurnsIds.length > 0) || (emptyTurnsIds.length > 0 && canCreateNewSplit);
+
+    return { canFull: canSelectFull, canHalf: canSelectHalf, emptyTurnsIds, halfTurnsIds };
+  };
+
+  // Auto-switch Update Effect
+  useEffect(() => {
+    if (step === 'preview' && sangPreview) {
+      const { canFull, canHalf } = getAvailability();
+      // Auto-select valid option if current is invalid
+      if (selectedShare === 1 && !canFull && canHalf) setSelectedShare(0.5);
+      else if (selectedShare === 0.5 && !canHalf && canFull) setSelectedShare(1.0);
+    }
+  }, [step, sangPreview, currentMembers]);
 
   return (
     <div className="min-h-screen bg-muted/30 pb-20 md:pb-8">
@@ -176,6 +225,31 @@ export default function JoinSANG() {
             {step === "success" && "¡Solicitud enviada!"}
           </p>
         </div>
+
+        {/* Step: Already Joined */}
+        {step === "already_joined" && (
+          <div className="text-center space-y-6 animate-scale-in">
+            <div className="h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center mx-auto">
+              <Users className="h-12 w-12 text-blue-600" />
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold mb-2">¡Ya eres miembro!</h2>
+              <p className="text-muted-foreground">
+                Ya formas parte de este SANG. Tu solicitud está en proceso o ya fue aprobada.
+              </p>
+            </div>
+
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full"
+              onClick={() => navigate(`/sang/${sangPreview?.id || ""}`)}
+            >
+              Ver Detalles del SANG
+            </Button>
+          </div>
+        )}
 
         {/* Step: Enter Code */}
         {step === "enter" && (
@@ -341,75 +415,87 @@ export default function JoinSANG() {
                 </div>
               )}
 
-              {/* TURN SELECTION GRID */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">Selecciona tu Turno</Label>
-                <div className="grid grid-cols-4 gap-2">
-                  {Array.from({ length: sangPreview.numberOfParticipants }, (_, i) => i + 1).map((turn) => {
-                    const turnMembers = currentMembers.filter(m => m.turnNumber === turn);
-                    const occupiedShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
-
-                    // Status Calculation
-                    let status: 'empty' | 'half' | 'full' = 'empty';
-                    if (occupiedShares >= 1) status = 'full';
-                    else if (occupiedShares > 0) status = 'half';
-
-                    // Availability Logic
-                    let isAvailable = false;
-                    let label = `${turn}`;
-
-                    if (selectedShare === 1.0) {
-                      // Full Share: Needs completely empty turn
-                      if (status === 'empty') isAvailable = true;
-                    } else {
-                      // Half Share: Needs empty or half-full
-                      if (status === 'empty') isAvailable = true;
-                      if (status === 'half') {
-                        isAvailable = true;
-                        label += " ½"; // Visual cue
-                      }
-                    }
-
-                    return (
-                      <button
-                        key={turn}
-                        type="button"
-                        onClick={() => isAvailable && setForm({ ...form, turnNumber: turn })}
-                        disabled={!isAvailable}
-                        className={cn(
-                          "h-12 rounded-lg font-bold border-2 transition-all flex items-center justify-center relative",
-                          form.turnNumber === turn
-                            ? "border-primary bg-primary text-primary-foreground scale-105 shadow-md"
-                            : isAvailable
-                              ? status === 'half'
-                                ? "border-warning/50 bg-warning/10 text-warning hover:border-warning hover:bg-warning/20"
-                                : "border-border bg-card hover:border-primary/50"
-                              : "border-border/50 bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50"
-                        )}
-                      >
-                        {label}
-                        {status === 'half' && isAvailable && (
-                          <span className="absolute -top-2 -right-2 h-4 w-4 bg-warning text-[10px] text-warning-foreground rounded-full flex items-center justify-center">
-                            1
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
+              {/* TURN SELECTION OR RANDOM MESSAGE */}
+              {sangPreview.turnAssignment === 'random' ? (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-6 text-center animate-fade-in">
+                  <div className="bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Calendar className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-1">Asignación Aleatoria</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Tu número de turno será asignado automáticamente cuando el SANG esté completo.
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
-                  {selectedShare === 0.5 ? "🟡 Turnos con 1/2 disponible" : "Solo turnos vacíos"}
-                </p>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">Selecciona tu Turno</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {Array.from({ length: sangPreview.numberOfParticipants }, (_, i) => i + 1).map((turn) => {
+                      const turnMembers = currentMembers.filter(m => m.turnNumber === turn);
+                      const occupiedShares = turnMembers.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+
+                      // Status Calculation
+                      let status: 'empty' | 'half' | 'full' = 'empty';
+                      if (occupiedShares >= 1) status = 'full';
+                      else if (occupiedShares > 0) status = 'half';
+
+                      // Availability Logic
+                      let isAvailable = false;
+                      let label = `${turn}`;
+
+                      if (selectedShare === 1.0) {
+                        // Full Share: Needs completely empty turn
+                        if (status === 'empty') isAvailable = true;
+                      } else {
+                        // Half Share: Needs empty or half-full
+                        if (status === 'empty') isAvailable = true;
+                        if (status === 'half') {
+                          isAvailable = true;
+                          label += " ½"; // Visual cue
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={turn}
+                          type="button"
+                          onClick={() => isAvailable && setForm({ ...form, turnNumber: turn })}
+                          disabled={!isAvailable}
+                          className={cn(
+                            "h-12 rounded-lg font-bold border-2 transition-all flex items-center justify-center relative",
+                            form.turnNumber === turn
+                              ? "border-primary bg-primary text-primary-foreground scale-105 shadow-md"
+                              : isAvailable
+                                ? status === 'half'
+                                  ? "border-warning/50 bg-warning/10 text-warning hover:border-warning hover:bg-warning/20"
+                                  : "border-border bg-card hover:border-primary/50"
+                                : "border-border/50 bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50"
+                          )}
+                        >
+                          {label}
+                          {status === 'half' && isAvailable && (
+                            <span className="absolute -top-2 -right-2 h-4 w-4 bg-warning text-[10px] text-warning-foreground rounded-full flex items-center justify-center">
+                              1
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    {selectedShare === 0.5 ? "🟡 Turnos con 1/2 disponible" : "Solo turnos vacíos"}
+                  </p>
+                </div>
+              )}
 
               <Button
                 variant="hero"
                 size="lg"
                 className="w-full"
                 onClick={handleJoin}
-                disabled={isLoading || !form.turnNumber}
+                disabled={isLoading || (sangPreview.turnAssignment !== 'random' && !form.turnNumber)}
               >
-                {isLoading ? "Enviando solicitud..." : `Solicitar Unirme (Turno ${form.turnNumber || '?'})`}
+                {isLoading ? "Enviando solicitud..." : (sangPreview.turnAssignment === 'random' ? "Solicitar Unirme" : `Solicitar Unirme (Turno ${form.turnNumber || '?'})`)}
               </Button>
               <p className="text-xs text-muted-foreground text-center">
                 El organizador debe aprobar tu solicitud para que puedas participar
