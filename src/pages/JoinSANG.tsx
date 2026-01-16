@@ -39,7 +39,59 @@ export default function JoinSANG() {
 
   // ... (Bank Check remains same)
 
-  // ... (handleSearch remains same)
+  const handleSearch = async (codeOverride?: string) => {
+    const codeToSearch = codeOverride || inviteCode;
+    if (!codeToSearch || codeToSearch.length < 6) return;
+
+    setIsLoading(true);
+    try {
+      // 1. Find SANG by code
+      const q = query(collection(db, "sangs"), where("inviteCode", "==", codeToSearch));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        toast({
+          variant: "destructive",
+          title: "SANG no encontrado",
+          description: "Verifica el código e inténtalo de nuevo.",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const sangDoc = querySnapshot.docs[0];
+      const sangData = { id: sangDoc.id, ...sangDoc.data() } as SANG;
+
+      // 2. Fetch Organizer Name
+      let organizerName = "Organizador";
+      try {
+        const orgDoc = await getDoc(doc(db, "users", sangData.organizerId));
+        if (orgDoc.exists()) {
+          organizerName = orgDoc.data().fullName || "Organizador";
+        }
+      } catch (e) {
+        console.error("Error fetching organizer", e);
+      }
+
+      // 3. Fetch Current Members (to check availability)
+      const membersRef = collection(db, `sangs/${sangData.id}/members`);
+      const membersSnapshot = await getDocs(membersRef);
+      const membersData = membersSnapshot.docs.map(d => d.data());
+      setCurrentMembers(membersData);
+
+      setSangPreview({ ...sangData, organizerName });
+      setStep("preview");
+    } catch (error) {
+      console.error("Error searching SANG:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Hubo un problema al buscar el SANG.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleJoin = async () => {
     if (!currentUser || !sangPreview) return;
