@@ -409,8 +409,10 @@ export default function SANGDetail() {
             </div>
             <div className="text-center">
               <Users className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
-              <p className="text-xs md:text-sm text-muted-foreground">Miembros</p>
-              <p className="font-semibold text-sm md:text-base">{members.length} / {sang.numberOfParticipants}</p>
+              <p className="text-xs md:text-sm text-muted-foreground">Cupos</p>
+              <p className="font-semibold text-sm md:text-base">
+                {members.reduce((acc, m) => acc + (m.sharePercentage || 1), 0)} / {sang.numberOfParticipants}
+              </p>
             </div>
           </div>
 
@@ -597,7 +599,8 @@ export default function SANGDetail() {
                   </p>
                   {/* Status Badge inside Card */}
                   {(() => {
-                    if (members.length < sang.numberOfParticipants) {
+                    const totalOccupiedShares = members.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+                    if (totalOccupiedShares < sang.numberOfParticipants) {
                       return (
                         <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full flex items-center animate-pulse">
                           Reclutando...
@@ -644,13 +647,14 @@ export default function SANGDetail() {
                         const allPaid = totalTurnMembers > 0 && paidCount === totalTurnMembers;
 
                         // NEW: Check if SANG is still filling up
-                        const isSangFull = members.length >= sang.numberOfParticipants;
+                        const totalOccupiedShares = members.reduce((acc, m) => acc + (m.sharePercentage || 1), 0);
+                        const isSangFull = totalOccupiedShares >= sang.numberOfParticipants;
 
                         if (!isSangFull) {
                           return (
                             <div>
                               <p className="font-semibold mb-0.5 opacity-90">SANG en Reclutamiento ⏳</p>
-                              <p className="opacity-75">Esperando que se completen todos los cupos ({members.length}/{sang.numberOfParticipants}).</p>
+                              <p className="opacity-75">Esperando que se completen todos los cupos ({totalOccupiedShares}/{sang.numberOfParticipants}).</p>
                             </div>
                           )
                         }
