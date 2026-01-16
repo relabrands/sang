@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Link2, Users, DollarSign, Calendar, CheckCircle } from "lucide-react";
+import { ArrowLeft, Link2, Users, DollarSign, Calendar, CheckCircle, Divide } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { BottomNav } from "@/components/BottomNav";
 import { Header } from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +23,7 @@ export default function JoinSANG() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"enter" | "preview" | "success">("enter");
   const [sangPreview, setSangPreview] = useState<SANG & { organizerName: string } | null>(null);
+  const [selectedShare, setSelectedShare] = useState(1.0); // Default to full share
 
   // Auto-trigger search if code came from URL
   useEffect(() => {
@@ -116,7 +118,8 @@ export default function JoinSANG() {
         turnNumber: 0, // 0 indicates not assigned yet
         status: "pending",
         joinedAt: serverTimestamp(),
-        name: memberName
+        name: memberName,
+        sharePercentage: selectedShare, // Save 0.5 or 1.0
       });
 
       setStep("success");
@@ -271,6 +274,38 @@ export default function JoinSANG() {
             </div>
 
             <div className="space-y-3">
+              {/* Share Selection if Allowed */}
+              {sangPreview.allowHalfShares && (
+                <div className="space-y-3 p-4 bg-muted/50 rounded-xl border border-border">
+                  <Label className="text-base font-semibold">Tipo de Participación</Label>
+                  <RadioGroup
+                    value={selectedShare.toString()}
+                    onValueChange={(v) => setSelectedShare(parseFloat(v))}
+                    className="grid grid-cols-2 gap-3"
+                  >
+                    <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedShare === 1 ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                      <RadioGroupItem value="1" className="sr-only" />
+                      <Users className="h-5 w-5 text-primary" />
+                      <div className="text-center">
+                        <span className="block font-bold">Completo</span>
+                        <span className="text-xs text-muted-foreground">100% Cuota</span>
+                      </div>
+                    </label>
+                    <label className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedShare === 0.5 ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                      <RadioGroupItem value="0.5" className="sr-only" />
+                      <Divide className="h-5 w-5 text-primary" />
+                      <div className="text-center">
+                        <span className="block font-bold">Medio</span>
+                        <span className="text-xs text-muted-foreground">50% Cuota</span>
+                      </div>
+                    </label>
+                  </RadioGroup>
+                  <div className="text-center text-sm">
+                    Pagarás: <span className="font-bold text-primary">RD$ {(sangPreview.contributionAmount * selectedShare).toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
               <Button
                 variant="hero"
                 size="lg"

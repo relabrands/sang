@@ -40,6 +40,7 @@ export interface SANG {
   currentTurn: number;
   payoutStatus?: 'collecting' | 'paid_out';
   lastPayoutProofUrl?: string;
+  allowHalfShares?: boolean;
 }
 
 export interface SANGMember {
@@ -54,6 +55,8 @@ export interface SANGMember {
   role?: string;
   paymentProofUrl?: string;
   lastPaymentDate?: Date;
+  sharePercentage?: number; // 0.5 or 1.0
+  linkedPartnerId?: string; // ID of the other 0.5 member if applicable
 }
 
 export interface Payment {

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, DollarSign, Users, Calendar, Shuffle, ListOrdered, Check } from "lucide-react";
+import { ArrowLeft, DollarSign, Users, Calendar, Shuffle, ListOrdered, Check, Divide } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { BottomNav } from "@/components/BottomNav";
+import { Switch } from "@/components/ui/switch";
 import { Header } from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
 import type { Frequency, TurnAssignment } from "@/types";
@@ -47,6 +47,7 @@ export default function CreateSANG() {
     numberOfParticipants: "",
     startDate: "",
     turnAssignment: "random" as TurnAssignment,
+    allowHalfShares: false, // NEW
   });
 
   const nextStep = () => setStep(step + 1);
@@ -114,6 +115,7 @@ export default function CreateSANG() {
         numberOfParticipants: parseInt(form.numberOfParticipants),
         startDate: new Date(form.startDate),
         turnAssignment: form.turnAssignment,
+        allowHalfShares: form.allowHalfShares, // NEW
         organizerId: currentUser.uid,
         status: "active",
         inviteCode: inviteCode,
@@ -133,6 +135,7 @@ export default function CreateSANG() {
         joinedAt: serverTimestamp(),
         role: "organizer",
         name: userProfile?.fullName || "Organizador",
+        sharePercentage: 1.0, // Organizer is full member by default usually
       });
 
       toast({
@@ -270,8 +273,8 @@ export default function CreateSANG() {
                 <Users className="h-8 w-8 text-primary" />
               </div>
               <div className="text-center mb-6">
-                <h2 className="text-xl font-semibold">¿Cuántos participantes?</h2>
-                <p className="text-muted-foreground text-sm">Incluyéndote a ti</p>
+                <h2 className="text-xl font-semibold">Participación</h2>
+                <p className="text-muted-foreground text-sm">Define cantidad y flexibilidad</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="participants">Número de participantes</Label>
@@ -287,6 +290,24 @@ export default function CreateSANG() {
                   autoFocus
                 />
               </div>
+
+              {/* Allow Half Shares Toggle */}
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card">
+                <div className="space-y-0.5">
+                  <Label className="text-base flex items-center gap-2">
+                    <Divide className="h-4 w-4 text-primary" />
+                    Permitir Medios Números
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Dos personas pueden compartir un turno (50% c/u)
+                  </p>
+                </div>
+                <Switch
+                  checked={form.allowHalfShares}
+                  onCheckedChange={(checked) => setForm({ ...form, allowHalfShares: checked })}
+                />
+              </div>
+
               {form.contributionAmount && form.numberOfParticipants && (
                 <div className="bg-accent rounded-xl p-4">
                   <p className="text-sm text-muted-foreground mb-1">Pago total por turno</p>
@@ -371,6 +392,10 @@ export default function CreateSANG() {
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Participantes</span>
                   <span className="font-medium">{form.numberOfParticipants}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Medios Números</span>
+                  <span className="font-medium">{form.allowHalfShares ? "Permitidos" : "No"}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Inicio</span>
