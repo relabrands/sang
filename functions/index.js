@@ -56,6 +56,51 @@ exports.onAdminChange = functions.firestore
         }
     });
 
+// 2.5. Trigger: On New Join Request (Member Created)
+exports.processJoinRequest = functions.firestore
+    .document("sangs/{sangId}/members/{memberId}")
+    .onCreate(async (snap, context) => {
+        const memberData = snap.data();
+        const sangId = context.params.sangId;
+        const memberId = context.params.memberId; // Usually userId
+
+        try {
+            // Get SANG to find Organizer
+            const sangSnap = await admin.firestore().collection("sangs").doc(sangId).get();
+            if (!sangSnap.exists) return;
+            const sangData = sangSnap.data();
+            const organizerId = sangData.organizerId;
+
+            // Don't notify if organizer joins their own SANG (rare but possible)
+            if (organizerId === memberId) return;
+
+            // Notify Organizer
+            await createNotification(
+                organizerId,
+                "Nueva Solicitud de Unión 👥",
+                `${memberData.name || "Alguien"} quiere unirse a "${sangData.name}".`,
+                "info"
+            );
+
+            // Optional: Email Organizer (if we had their email handy, typically fetched from Auth or User doc)
+            const orgUserSnap = await admin.firestore().collection("users").doc(organizerId).get();
+            if (orgUserSnap.exists) {
+                const orgEmail = orgUserSnap.data().email;
+                if (orgEmail) {
+                    await sendEmail(orgEmail, "join_request", {
+                        organizerName: orgUserSnap.data().fullName,
+                        memberName: memberData.name,
+                        sangName: sangData.name,
+                        role: "Organizador"
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error("Error processing join request:", error);
+        }
+    });
+
 // 3. Send Broadcast Notification (Callable by Admin)
 exports.sendBroadcast = functions.https.onCall(async (data, context) => {
     // 1. Verify Authentication & Admin Role
@@ -237,6 +282,23 @@ exports.onMemberUpdate = functions.firestore
         // Scenario 3: Payment Confirmed (Paid)
         if (before.paymentStatus !== 'paid' && after.paymentStatus === 'paid') {
             await sendEmail(email, 'payment_received', templateData, userId, "Pago Confirmado ✅", `Tu pago para el SANG "${sangName}" ha sido recibido.`);
+        }
+
+        // Scenario 4: Payment Review Request (Reviewing) -> Notify Organizer
+        if (before.paymentStatus !== 'reviewing' && after.paymentStatus === 'reviewing') {
+            // Fetch Organizer ID from SANG
+            const fullSangSnap = await admin.firestore().collection('sangs').doc(sangId).get();
+            if (fullSangSnap.exists) {
+                const organizerId = fullSangSnap.data().organizerId;
+                if (organizerId && organizerId !== userId) {
+                    await createNotification(
+                        organizerId,
+                        "Revisión de Pago Pendiente 💸",
+                        `${after.name} ha subido un comprobante en "${sangName}".`,
+                        "warning"
+                    );
+                }
+            }
         }
     });
 

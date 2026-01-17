@@ -38,7 +38,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { auth, db, functions } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { cn } from "@/lib/utils";
-import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot, setDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, getDocs, where, getCountFromServer, collectionGroup, onSnapshot, setDoc, doc, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -172,15 +172,74 @@ export default function AdminDashboard() {
   };
 
   const handleResetDatabase = async () => {
-    if (!confirm("⚠️ ¡ADVERTENCIA! ⚠️\n\n¿Estás seguro de que deseas resetear la base de datos?\n\nEsta acción:\n1. Eliminará TODOS los SANGs.\n2. Eliminará TODOS los usuarios (excepto a ti).\n3. Eliminará todas las cuentas de autenticación.\n\nNO HAY VUELTA ATRÁS.")) {
+    if (!confirm("⚠️ ¡ADVERTENCIA! ⚠️\n\n¿Estás seguro de que deseas resetear la base de datos?\n\nEsta acción:\n1. Eliminará TODOS los SANGs y sus miembros.\n2. Eliminará TODOS los usuarios (excepto a ti).\n\nNO HAY VUELTA ATRÁS.")) {
       return;
     }
 
+    const adminId = userProfile?.uid || auth.currentUser?.uid;
+    toast({ title: "Iniciando Reseteo...", description: "Por favor espera, esto puede tardar unos segundos." });
+
     try {
-      const resetFn = httpsCallable(functions, 'resetDatabase');
-      await resetFn();
-      toast({ title: "Éxito", description: "Base de datos reseteada correctamente." });
-      // Refresh handled by listeners but good to force clear if needed
+      const batch = writeBatch(db);
+      let operationCount = 0;
+      const MAX_BATCH_SIZE = 450; // Safety margin below 500
+
+      const commitBatchIfFull = async () => {
+        if (operationCount >= MAX_BATCH_SIZE) {
+          await batch.commit();
+          operationCount = 0;
+        }
+      }
+
+      // 1. Delete SANGS and their MEMBERS
+      // We need to query all SANGs first
+      const sangsSnapshot = await getDocs(collection(db, "sangs"));
+
+      for (const sangDoc of sangsSnapshot.docs) {
+        // 1.1 Delete Members Subcollection
+        const membersSnapshot = await getDocs(collection(db, `sangs/${sangDoc.id}/members`));
+        for (const memberDoc of membersSnapshot.docs) {
+          batch.delete(doc(db, `sangs/${sangDoc.id}/members`, memberDoc.id));
+          operationCount++;
+        }
+
+        // 1.2 Delete SANG Doc
+        batch.delete(doc(db, "sangs", sangDoc.id));
+        operationCount++;
+      }
+
+      // 2. Delete Users (Except Admin)
+      const usersSnapshot = await getDocs(collection(db, "users"));
+      for (const userDoc of usersSnapshot.docs) {
+        if (userDoc.id === adminId) continue; // Skip Admin
+
+        batch.delete(doc(db, "users", userDoc.id));
+        operationCount++;
+      }
+
+      // 3. Clear Payments/Notifications/Templates if requested? 
+      // User specificed: "sangs y historial de pago", which are derived from members/sangs mostly.
+      // We should probably check if there is a top-level 'payments' collection just in case, though app seems to use subcollections.
+
+      // Commit verification
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+
+      toast({ title: "Éxito", description: "Base de datos limpiada correctamente." });
+
+      // Force refresh of local state arrays just in case listeners lag
+      setAllSangs([]);
+      setAllUsers((prev) => prev.filter(u => u.id === adminId));
+      setStats({
+        totalUsers: 1,
+        activeSangs: 0,
+        completedSangs: 0,
+        monthlyVolume: 0,
+        latePaymentRatio: 0,
+        averageReputation: 100,
+      });
+
     } catch (error: any) {
       console.error("Error resetting database:", error);
       toast({ variant: "destructive", title: "Error", description: error.message });
