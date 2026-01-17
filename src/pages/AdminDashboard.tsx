@@ -213,6 +213,13 @@ export default function AdminDashboard() {
       for (const userDoc of usersSnapshot.docs) {
         if (userDoc.id === adminId) continue; // Skip Admin
 
+        // 2.1 Delete Notifications Subcollection
+        const notifsSnapshot = await getDocs(collection(db, `users/${userDoc.id}/notifications`));
+        for (const notifDoc of notifsSnapshot.docs) {
+          batch.delete(doc(db, `users/${userDoc.id}/notifications`, notifDoc.id));
+          operationCount++;
+        }
+
         batch.delete(doc(db, "users", userDoc.id));
         operationCount++;
       }
